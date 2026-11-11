@@ -388,3 +388,9 @@ details.kit > summary { cursor: pointer; padding: 12px 14px; font-weight: 600; f
 .diagram-v .node .t2 { font-size: 12.5px; }
 .jump .btn { white-space: nowrap; }
 @media (max-width: 520px) { .stats { gap: 6px; } .stat-tile { padding: 8px; } .stat-tile .v { font-size: 1rem; } .stat-tile .k { font-size: 10px; } }
+.fill { margin-top: 10px; padding: 12px 14px; border: 1px solid #f3d3aa; background: var(--warn-50); border-radius: 12px; }
+.fill-title { font-weight: 700; font-size: 14px; color: var(--ink); }
+.fill ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.fill li { font-size: 13.5px; color: #3b2a12; line-height: 1.45; }
+.fill li.fill-best { background: #fff; border-radius: 8px; padding: 8px 10px; border: 1px solid #e9d2a8; }
+.fill a { color: var(--indigo); }

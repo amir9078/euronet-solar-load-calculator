@@ -245,7 +245,32 @@
       html += partRow('Battery', m, '<b>' + b.units + ' &times;</b> ' + wiring + ' &middot; ' + kwh(b.totalKWh) + ' total, ' + kwh(b.usableKWh) + ' usable', b.units, b.short);
     }
     if (sys.pv) html += partRow('Solar panels', sys.pv.panel, '<b>' + sys.pv.count + ' &times; ' + sys.pv.panel.wp + ' W</b> &middot; ' + nd(sys.pv.kWp, 2) + ' kWp &middot; about ' + n0(sys.pv.areaM2) + ' m&sup2; of roof', sys.pv.count, sys.pv.short);
-    return '<ul class="parts">' + html + '</ul>';
+    return '<ul class="parts">' + html + '</ul>' + fillHtml(sys);
+  }
+
+  // what stock can stand in for the panels we are short of
+  function fillHtml(sys) {
+    var f = sys.pv && sys.pv.fill;
+    if (!f) return '';
+    var main = sys.pv.panel, rows = [];
+    if (f.readyNow) {
+      var add = f.readyNow.mix[1];
+      rows.push('<li class="fill-best"><strong>Ready now.</strong> Fit the ' + f.inStock + ' &times; ' + main.wp + ' W on the first solar input and ' + add.count + ' &times; ' +
+        '<a href="' + esc(add.panel.url) + '" target="_blank" rel="noopener">' + esc(add.panel.name) + '</a> on the second. ' + nd(f.readyNow.kWp, 2) + ' kWp in total, covering ' +
+        pct(f.readyNow.coverage) + (sys.pv.target ? ' of your day instead of ' + pct(sys.pv.coverage) : '') + '. All in stock.</li>');
+    }
+    if (f.swap) {
+      rows.push('<li><strong>Or one model throughout.</strong> ' + f.swap.count + ' &times; <a href="' + esc(f.swap.panel.url) + '" target="_blank" rel="noopener">' + esc(f.swap.panel.name) + '</a>, ' + nd(f.swap.kWp, 2) + ' kWp, all in stock.</li>');
+    }
+    if (!f.readyNow && f.inputs < 2 && !f.swap) {
+      rows.push('<li>This inverter has one solar input, so a second panel model cannot be added to the same string.</li>');
+    }
+    var others = f.options.filter(function (o) { return !f.readyNow || o.panel.id !== f.readyNow.mix[1].panel.id; });
+    if (others.length) {
+      rows.push('<li>Other panels in stock ' + others.map(function (o) { return o.avail + ' &times; ' + o.panel.wp + ' W'; }).join(', ') + '. Too few of each to make a string on their own.</li>');
+    }
+    rows.push('<li>Or keep the design and wait for ' + f.short + ' &times; ' + main.wp + ' W from the next shipment.</li>');
+    return '<div class="fill"><p class="fill-title">For the ' + f.short + ' panels we are short of</p><ul>' + rows.join('') + '</ul></div>';
   }
 
   function statsHtml(sys, res) {
@@ -271,7 +296,6 @@
     if (!res.fromStock) n.push('Nothing in stock in ' + region().label + ' fits this exactly, so this system uses items we would order for you.');
     if (sys.tight) n.push('The inverter runs close to its limit. Moving a heavy appliance off the battery gives it more room.');
     if (sys.pv && sys.pv.capped) n.push('The inverter takes about ' + pw(sys.inverter.item.pvMaxW * sys.inverter.units) + ' of panels at most, so solar covers ' + pct(sys.pv.coverage) + ' instead of ' + pct(state.coverage) + '.');
-    if (sys.pv && sys.pv.short) n.push('We have ' + (sys.pv.count - sys.pv.short) + ' of these panels in stock now. The other ' + sys.pv.short + ' come with the next shipment, or our team can suggest a mix.');
     if (sys.goal === 'grid') n.push('Grid-tied inverters switch off in a power cut for safety. Choose Power backup if you need power during cuts.');
     if (sys.inverter.item.phase === 3) n.push('This inverter needs a three-phase supply.');
     if (sys.goal === 'pump') n.push('Match the drive to the pump motor phase. Panels are sized at ' + nd(A.pumpArrayRatio, 1) + ' times the motor power so the pump keeps running in weaker sun.');
@@ -285,6 +309,7 @@
     lines.push((sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '1 x ') + sys.inverter.item.name);
     if (sys.battery) lines.push(sys.battery.units + ' x ' + sys.battery.model.name + ' (' + kwh(sys.battery.totalKWh) + ')');
     if (sys.pv) lines.push(sys.pv.count + ' x ' + sys.pv.panel.name + ' (' + nd(sys.pv.kWp, 2) + ' kWp)');
+    if (sys.pv && sys.pv.fill) lines.push('(' + sys.pv.fill.inStock + ' in stock' + (sys.pv.fill.readyNow ? ', ready-now option adds ' + sys.pv.fill.readyNow.mix[1].count + ' x ' + sys.pv.fill.readyNow.mix[1].panel.name + ' on the second solar input' : '') + ')');
     sys.kit.forEach(function (k) { lines.push(k.qty + ' x ' + k.item.name); });
     if (sys.goal !== 'pump') lines.push('', 'Load ' + n0(L.connectedW) + ' W connected, about ' + nd(L.dailyWh / 1000, 1) + ' kWh a day' + (sys.battery ? ', backup ' + hrs(state.hours) : '') + '.');
     lines.push('Country ' + r.label + '.', '', 'My results ' + shareUrl());

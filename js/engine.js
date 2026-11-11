@@ -96,6 +96,38 @@
     return best;
   }
 
+  /* When panels are short, list what stock can stand in for them. Each string stays one panel
+   * model, so a second model may only go on a separate solar input. */
+  function fillFor(pv, data, have, needW, maxW, inputs, dailyWh, psh, A) {
+    if (!pv.short) return null;
+    var main = pv.panel, inStock = pv.count - pv.short;
+    var shortW = pv.short * main.wp;
+    var room = maxW ? Math.max(0, maxW - inStock * main.wp) : Infinity;
+    var options = [];
+    data.PANELS.forEach(function (p) {
+      if (p.id === main.id) return;
+      var avail = have(p.id);
+      if (avail <= 0) return;
+      var n = Math.min(avail, Math.ceil(shortW / p.wp), Math.floor(room / p.wp));
+      if (n < 1) return;
+      options.push({ panel: p, count: n, avail: avail, kWp: n * p.wp / 1000, covers: n * p.wp >= shortW });
+    });
+    options.sort(function (a, b) { return (b.covers - a.covers) || (b.kWp - a.kWp); });
+    var readyNow = null;
+    if (inputs >= 2 && inStock > 0) {
+      var second = options.filter(function (o) { return o.count >= 2; })[0];
+      if (second) {
+        var kWp = inStock * main.wp / 1000 + second.kWp;
+        var y = kWp * psh * A.perfRatio;
+        readyNow = { mix: [{ panel: main, count: inStock }, { panel: second.panel, count: second.count }], kWp: kWp, yieldKWh: y, coverage: dailyWh > 0 ? Math.min(1, y / (dailyWh / 1000)) : 0 };
+      }
+    }
+    // a whole array of one in-stock model, for inverters with one solar input
+    var swap = data.PANELS.filter(function (p) { return p.id !== main.id && have(p.id) >= Math.ceil(needW / p.wp) && (!maxW || Math.ceil(needW / p.wp) * p.wp <= maxW + p.wp); })
+      .map(function (p) { var n = Math.ceil(needW / p.wp); return { panel: p, count: n, kWp: n * p.wp / 1000 }; })[0] || null;
+    return { inStock: inStock, short: pv.short, inputs: inputs, options: options, readyNow: readyNow, swap: swap };
+  }
+
   function pvSummary(pick, dailyWh, psh, A) {
     var yieldKWh = pick.kWp * psh * A.perfRatio;
     return {
@@ -199,6 +231,7 @@
           var needW = o.coverage * load.dailyWh / (o.psh * A.perfRatio);
           pv = pvSummary(panelsFor(data, have, needW, inv.pvMaxW * units, strict), load.dailyWh, o.psh, A);
           pv.target = o.coverage;
+          pv.fill = fillFor(pv, data, have, needW, inv.pvMaxW * units, inv.trackers * units, load.dailyWh, o.psh, A);
         }
         var L = load.runW / (inv.ratedW * units);
         var r = runtimeH / o.backupHours;
@@ -244,6 +277,7 @@
       var pick = panelsFor(data, have, needW, inv.ratedW * 1.3, strict);
       var pv = pvSummary(pick, load.dailyWh, o.psh, A);
       pv.target = o.coverage;
+      pv.fill = fillFor(pv, data, have, needW, inv.ratedW * 1.3, inv.trackers, load.dailyWh, o.psh, A);
       var x = -Math.abs(pick.kWp * 1000 / inv.ratedW - A.gridDcAc) * 20;
       out.push(finish({ goal: 'grid', inverter: { item: inv, units: 1, short: invShort }, battery: null, pv: pv, dcAc: pick.kWp * 1000 / inv.ratedW }, data, have, A, x));
     });
@@ -259,6 +293,7 @@
       if (strict && invShort) return;
       var pick = panelsFor(data, have, motorW * A.pumpArrayRatio, null, strict);
       var pv = pvSummary(pick, 0, o.psh, A);
+      pv.fill = fillFor(pv, data, have, motorW * A.pumpArrayRatio, null, 1, 0, o.psh, A);
       var x = -(inv.ratedW / motorW - 1) * 30;
       out.push(finish({ goal: 'pump', inverter: { item: inv, units: 1, short: invShort }, battery: null, pv: pv, motorW: motorW }, data, have, A, x));
     });
