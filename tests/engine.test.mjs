@@ -93,8 +93,9 @@ for (const r of ['ae', 'sa', 'ng']) {
               if (!res.best) return;
               checkSystem(res.best, { r, o }, res, res.fromStock);
               for (const a of res.alternatives) {
+                if (a.label === 'first') { assert.ok(!a.ready, 'first choice is shown only when it needs ordering'); checkSystem(a, { r, o }, res, false); continue; }
                 checkSystem(a, { r, o }, res, res.fromStock);
-                assert.ok(a.inverter.item.id !== res.best.inverter.item.id || (a.battery && res.best.battery && a.battery.model.id !== res.best.battery.model.id), 'alternative differs');
+                assert.ok(a.inverter.item.id !== res.best.inverter.item.id || a.inverter.units !== res.best.inverter.units || (a.battery && res.best.battery && a.battery.model.id !== res.best.battery.model.id), 'alternative differs');
               }
               if (res.fromStock) assert.ok(res.best.ready || res.best.toOrder.every((n) => /Panel/.test(n)), 'from-stock answer only waits on panels');
             });
@@ -111,6 +112,30 @@ for (const r of ['ae', 'sa', 'ng']) {
       checkSystem(res.best, { r, o }, res, res.fromStock);
     });
   }
+}
+
+
+for (const r of ['ae', 'sa', 'ng']) for (const [peak, month] of [[15, 3000], [30, 6000], [120, 40000], [600, 200000]]) for (const mode of ['grid', 'hybrid', 'off']) {
+  test('biz ' + r + ' ' + peak + ' kW ' + mode, () => {
+    const o = { goal: 'biz', bizMode: mode, peakKW: peak, monthlyKWh: month, region: r, backupHours: 4, coverage: mode === 'off' ? 1 : 0.6, psh: 5.5 };
+    const res = engine.recommend({}, o, data, stock);
+    assert.ok(res.best, 'answer');
+    for (const s of [res.best, ...res.alternatives]) {
+      const invs = [s.inverter, ...(s.extraInverters || [])];
+      for (const x of invs) assert.ok(x.units <= x.item.parallelMax || x.item.kind === 'ongrid', 'parallel limit ' + x.item.id);
+      if (mode === 'grid') {
+        const ac = invs.reduce((t, x) => t + x.item.ratedW * x.units, 0);
+        assert.ok(s.pv.kWp * 1000 / ac <= 1.3 + 0.02, 'dc to ac');
+        assert.ok(!s.battery);
+      } else {
+        const rated = s.inverter.item.ratedW * s.inverter.units;
+        assert.ok(peak * 1000 <= rated * 0.95 + 1e-6, 'power ' + s.inverter.item.id);
+        assert.ok(s.battery.runtimeH + 1e-6 >= 4, 'runtime');
+        assert.ok(s.pv && s.pv.count > 0);
+        if (mode === 'off') assert.ok(!(s.inverter.item.kind === 'ess' && !s.inverter.item.offgrid), 'off-grid capable');
+      }
+    }
+  });
 }
 
 test('stock decides, AE 2 BHK backup ready from stock', () => {

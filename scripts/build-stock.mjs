@@ -1,6 +1,6 @@
 /*
  * Builds data/stock.json from a private Odoo export (_data/odoo-stock.json, never committed).
- * Publishes free stock (on hand minus reserved) per country for catalogue items only,
+ * Publishes free stock (on hand minus reserved) per selling company for catalogue items only,
  * capped, with no costs, prices or locations.
  *
  *   node scripts/build-stock.mjs [path-to-odoo-export]
@@ -18,12 +18,9 @@ const src = process.argv.slice(2).find((a) => !a.startsWith('--')) || path.join(
 const odoo = JSON.parse(fs.readFileSync(src, 'utf8'));
 const CAP = data.ASSUMPTIONS.stockCap;
 
-const region = (loc) => {
-  if (/^(WHDXB|SHDXB|WHSHJ|WHSH)\//.test(loc)) return 'ae';
-  if (/^(WHKSA|SHKSA)\//.test(loc)) return 'sa';
-  if (/^NIG\//.test(loc)) return 'ng';
-  return null;
-};
+// stock comes from the company that sells in each country: EURONET UAE (8), EURONET KSA (14), EURONET NIGERIA (7)
+const COMPANY = { 8: 'ae', 14: 'sa', 7: 'ng' };
+const region = (loc, companyId) => (/^Physical Locations/.test(loc) ? null : COMPANY[companyId] || null);
 const norm = (s) => s.replace(/^\[[^\]]*\]\s*/, '').toUpperCase().replace(/\s+/g, ' ').trim();
 
 const items = [...cat.INVERTERS, ...cat.BATTERIES, ...cat.PANELS, ...cat.ACCESSORIES];
@@ -37,7 +34,7 @@ const matchedNames = new Set();
 const unmatched = new Map();
 for (const q of odoo.quants) {
   const name = products.get(q[0]);
-  const r = region(q[1]);
+  const r = region(q[1], q[2]);
   if (!name || !r) continue;
   const free = q[3] - q[4];
   const rule = rules.find((x) => x.res.some((re) => re.test(name)));

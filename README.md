@@ -12,16 +12,17 @@ Plain HTML, CSS and JavaScript. No build step, so it runs on GitHub Pages as it 
 | Cut my electricity bill | Grid-tied PV inverter (5 to 120 kW) and panels, no battery |
 | No grid at all | Inverter, battery and enough panels for the whole day |
 | Solar water pump | Pump drive sized to the motor, panels at 1.5 times the motor power |
+| Business, factory or project | From monthly kWh and highest load. Bill saving builds a grid-tied plant from a mix of PV inverters. Backup and off-grid compare paralleled RSZ or Pro or Edge hybrids, Ultra 30 kW with high-voltage packs, and 125 kW or 100 kW storage cabinets, with built-in or AC-coupled solar |
 
-The catalogue (`js/catalog.js`) holds 40 inverters across the A, Shark, Onyx, RS, S, RSZ, Pro IP65, LF, PV and pump ranges, 27 batteries (lithium, gel Blue, Eco and FT, tubular), 6 panels and 14 fitting kit parts. Parallel inverters are used where the datasheet allows it (RSZ up to 9, Pro 10 and 16 kW up to 6).
+The catalogue (`js/catalog.js`) holds 46 inverters and storage cabinets (A, Shark, Onyx, RS, S, RSZ, Pro IP65, Edge, Ultra, LF, PV, pump, C&I ESS), 30 batteries (lithium, gel Blue, Eco and FT, tubular, high-voltage packs), 6 panels and 14 fitting kit parts. Parallel units follow the datasheets (RSZ up to 9, Pro 10 and 16 kW up to 6, Ultra up to 10, storage cabinets up to 10).
 
 ## How it picks
 
-For the chosen country it builds every inverter, battery and panel combination the stock allows, keeps the ones that carry the running load and motor start, hold the backup energy on the right battery voltage and reach the solar goal, then scores them on fit, lithium life, stock depth and part count. The best one is shown first, with up to two alternatives (lead-acid battery version, outdoor IP65 version). If nothing in stock fits, it says so and proposes items to order.
+For the chosen country it builds every inverter, battery and panel combination the stock allows, keeps the ones that carry the running load and motor start, hold the backup energy on the right battery voltage and reach the solar goal, then scores them on fit, lithium life, stock depth and part count. The best one is shown first, with up to two alternatives (lead-acid battery version, outdoor IP65 version). If a part is short it says which other EURONET company holds it, and for short panels it offers a ready-now mix on a second solar input, a one-model swap, or shipping from another location. When stock forces a different answer it also shows our first choice, to order. If nothing in stock fits, it proposes items to order.
 
 ## Stock
 
-`data/stock.json` is public and holds only free stock (on hand minus reserved) per country for catalogue items, capped at 50. No costs, prices or warehouse locations.
+`data/stock.json` is public and holds only free stock (on hand minus reserved) for catalogue items, capped at 50, per selling company. The UAE, Sudan and every other country use EURONET UAE, Saudi Arabia uses EURONET KSA and Nigeria uses EURONET NIGERIA. No costs, prices or warehouse locations.
 
 To refresh it
 

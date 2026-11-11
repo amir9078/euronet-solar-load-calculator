@@ -55,6 +55,14 @@
     { id: 'pro6', kind: 'hybrid', series: 'Pro IP65', name: 'Hybrid Inverter 6kW Pro IP65', ratedW: 6000, busV: 48, mppt: '50-500 V DC, 2 MPPT', trackers: 2, ip: 'IP65', path: 'hybrid-inverter-6kw-pro-ip65', img: 'Hybrid Inverter 3KW-6KW Pro IP65-768x1024.webp', match: ['^GEN 5 PRO HYBRID INVERTER 6KW'], points: ['IP65, mounts outdoors', 'Two MPPT inputs, Wi-Fi app built in'] },
     { id: 'pro10', kind: 'hybrid', series: 'Pro IP65', name: 'Hybrid Inverter 10kW Pro IP65', ratedW: 10000, busV: 48, chargeA: 220, parallelMax: 6, trackers: 2, mppt: '50-450 V DC, 2 MPPT', ip: 'IP65', path: 'hybrid-inverter-10kw-pro-ip65', img: 'Hybrid Inverter 10KW-16KW Pro IP65-1.webp', match: ['^GEN 5 PRO HYBRID INVERTER 10KW'], points: ['IP65, mounts outdoors', 'Parallel up to 6 units'] },
     { id: 'pro16', kind: 'hybrid', series: 'Pro IP65', name: 'Hybrid Inverter 16kW Pro IP65', ratedW: 16000, busV: 48, chargeA: 250, parallelMax: 6, trackers: 3, mppt: '50-450 V DC, 3 MPPT', ip: 'IP65', path: 'hybrid-inverter-16kw-pro-ip65', img: 'Hybrid Inverter 10KW-16KW Pro IP65-1.webp', match: ['^GEN 5 PRO HYBRID INVERTER 16KW'], points: ['IP65, mounts outdoors', 'Three MPPT inputs, parallel up to 6 units'] },
+    // Commercial three-phase
+    { id: 'edge12', kind: 'hybrid', series: 'Edge Series', name: 'Edge Series Hybrid Inverter 12kW 48V', ratedW: 12000, busV: 48, phase: 3, pvMaxW: 20000, pvPublished: true, trackers: 2, mppt: '160-980 V DC, 2 MPPT', ip: 'IP65', business: true, path: 'edge-series-hybrid-inverter-12kw-48v', img: 'EURONET_GEN_5-EDGE_SERIES_12-20KW_INVERTER.webp', match: ['^(GEN 5 )?EDGE SERIES HYBRID INVERTER 12KW'], points: ['Three-phase 400 V on a 48 V battery', 'Up to 20 kW of solar, IP65'] },
+    { id: 'edge20', kind: 'hybrid', series: 'Edge Series', name: 'Edge Series Hybrid Inverter 20kW 48V', ratedW: 20000, busV: 48, phase: 3, pvMaxW: 30000, pvPublished: true, trackers: 3, mppt: '160-980 V DC, 3 MPPT', ip: 'IP65', business: true, path: 'edge-series-hybrid-inverter-20kw-48v', img: 'EURONET_GEN_5-EDGE_SERIES_12-20KW_INVERTER.webp', match: ['^(GEN 5 )?EDGE SERIES HYBRID INVERTER 20KW'], points: ['Three-phase 400 V on a 48 V battery', 'Up to 30 kW of solar, IP65'] },
+    { id: 'ultra30', kind: 'hv', series: 'Ultra Series', name: 'Ultra Series Hybrid Inverter 30kW', ratedW: 30000, phase: 3, pvMaxW: 45000, pvPublished: true, parallelMax: 10, trackers: 3, mppt: '160-950 V DC, 3 MPPT', ip: 'IP66', business: true, path: 'ultra-series-hybrid-inverter-30kw', img: 'GEN 5 ULTRA SERIES SOLAR HYBRID 20KW_30KW-1.webp', match: ['^(GEN 5 )?ULTRA SERIES HYBRID INVERTER 30KW'], points: ['High-voltage battery 230-800 V at full power', 'Up to 45 kW of solar, parallel up to 10 units'] },
+    // All-in-one storage cabinets (converter and battery in one)
+    { id: 'ess241', kind: 'ess', series: 'C&I ESS', name: 'C&I Battery Energy Storage System 125kW/241kWh', ratedW: 125000, kWh: 241, phase: 3, pvMaxW: 200000, pvPublished: true, trackers: 4, parallelMax: 10, offgrid: true, ip: 'IP54', business: true, path: 'c-i-battery-energy-storage-system-125kw-241kwh', basePath: 'c-i-energy-storage', img: '241kWh.webp', match: ['^C&I BATTERY ENERGY STORAGE SYSTEM 125KW'], points: ['Converter, battery, fire suppression and EMS in one cabinet', 'Takes up to 200 kW of solar, 10 ms switchover'] },
+    { id: 'essout', kind: 'ess', series: 'HV Outdoor ESS', name: 'HV Outdoor ESS 100kW/215kWh', ratedW: 100000, kWh: 215.04, phase: 3, pvMaxW: 0, parallelMax: 10, ip: 'IP54', business: true, path: 'hv-outdoor-ess-100kw-215kwh', basePath: 'c-i-energy-storage', img: 'hv-outdoor-ess-100kw-215kwh.webp', match: ['^HV OUTDOOR ESS'], points: ['Outdoor cabinet, parallel up to 10 (2,150 kWh)', 'Pairs with grid-tied PV inverters for the solar'] },
+    { id: 'essin', kind: 'ess', series: 'Indoor ESS', name: '215kWh Indoor Battery Pack 100kW', ratedW: 100000, kWh: 215.04, phase: 3, pvMaxW: 0, parallelMax: 1, ip: 'IP54', business: true, path: '215kwh-indoor-battery-pack', basePath: 'c-i-energy-storage', img: '215kwh-indoor-battery-pack.webp', match: ['^215KWH INDOOR'], points: ['Indoor cabinet with converter, 100 kW', 'Pairs with grid-tied PV inverters for the solar'] },
     // LF backup inverters (datasheet, peak load ratio 3 to 1, solar only by optional PWM)
     { id: 'lf900', kind: 'lf', series: 'LF Series', name: 'LF Inverter 900VA 12V', ratedW: 640, busV: 12, surgeX: 3, ip: 'IP21', path: 'lf-inverter-900va-12v', img: 'LF Inverter 900VA 12V.webp', match: ['^LF (HYBRID )?INVERTER 900VA'], points: ['Toroidal transformer, takes 3 times its rating for motor starts', 'Pure sine wave, about 10 ms changeover'] },
     { id: 'lf1100', kind: 'lf', series: 'LF Series', name: 'LF Hybrid Inverter 1100VA 12V', ratedW: 800, busV: 12, surgeX: 3, ip: 'IP21', path: null, img: 'LF Hybrid Inverter 1250VA 12V.webp', match: ['^LF (HYBRID )?INVERTER 1100VA'], points: ['Toroidal transformer, takes 3 times its rating for motor starts', 'Pure sine wave, about 10 ms changeover'] },
@@ -82,16 +90,16 @@
     { id: 'pm30', kind: 'pump', series: 'Pump Inverter', name: 'Pump Inverter 30kW 3-Phase', ratedW: 30000, phase: 3, ip: 'IP65', path: 'pump-inverter-30kw-3-phase', img: 'solar-pump-inverter.webp', match: ['^PUMP INVERTER 30KW'], points: ['Runs the pump straight from solar, built-in MPPT', 'Dry-run and overload protection'] }
   ];
   INVERTERS.forEach(function (i) {
-    i.url = i.path ? INV + i.path : SITE + '/products/solar-energy/solar-inverters';
+    i.url = i.kind === 'ess' ? SITE + '/products/solar-energy/' + i.basePath + '/' + i.path : i.path ? INV + i.path : SITE + '/products/solar-energy/solar-inverters';
     i.img = media(i.img);
     i.parallelMax = i.parallelMax || 1;
     i.trackers = i.trackers || 1;
     if (i.surgeX) i.surgeW = i.surgeX * i.ratedW;
     if (!i.surgeW) i.surgeW = null;
-    if (i.kind === 'hybrid' || i.kind === 'offgrid') {
+    if (i.kind === 'hybrid' || i.kind === 'offgrid' || i.kind === 'hv') {
       if (!i.pvMaxW) { i.pvMaxW = approxPv(i.ratedW, i.busV, i.chargeA); i.pvPublished = false; }
     }
-    i.solar = i.kind !== 'lf';
+    i.solar = i.kind !== 'lf' && !(i.kind === 'ess' && !i.pvMaxW);
   });
 
   /* Batteries. ah is the rating used for energy. maxW is continuous power per unit
@@ -133,6 +141,10 @@
     bat({ id: 'g200e', chem: 'gel', name: 'Gel Battery 12V 200Ah Eco Series', v: 12, ah: 200, path: 'gel-battery-12v-200ah-eco-series', img: 'GEL BATTERY 200-3.webp', match: ['^GEL BATTERY 12V 200AH ECO'] }),
     bat({ id: 'g200f', chem: 'gel', name: 'Gel Battery 12V 200Ah FT', v: 12, ah: 200, path: 'gel-battery-12v-200ah-ft', img: 'Gel Battery 12V 200AH FT.webp', match: ['^GEL BATTERY 12V 200AH FT'] }),
     bat({ id: 'g250', chem: 'gel', name: 'Gel Battery 12V 250Ah Blue', v: 12, ah: 250, path: 'gel-battery-12v-250ah-blue', img: '12V 250AH-768x1024.webp', match: ['^GEL BATTERY 12V 250AH BLUE'] }),
+    // High-voltage packs for the Ultra Series (230-800 V at rated power)
+    { id: 'box215', chem: 'hv', name: '215kWh Battery Pack', kWh: 215.04, v: 768, maxPar: 10, dod: 0.9, ip: 'IP55', life: 'LFP, parallel up to 10 cabinets', url: SITE + '/products/solar-energy/c-i-energy-storage/215kwh-battery-pack', img: media('215kwh-battery-pack.webp'), match: ['^215KWH BATTERY PACK'] },
+    { id: 'hv716', chem: 'hv', name: 'High Voltage Battery 716V 100Ah', kWh: 71.6, v: 716, maxPar: 4, dod: 0.9, life: LFP, url: SITE + '/products/solar-energy/c-i-energy-storage/high-voltage-battery-716v', img: media('high-voltage-battery-716v.webp'), match: ['^HIGH VOLTAGE BATTERY 716V'] },
+    { id: 'hvc160', chem: 'hv', name: 'High Voltage Energy Storage Battery 160.76kWh', kWh: 160.76, v: 512, maxPar: 28, dod: 0.9, life: '6,000 cycles at 80% depth', url: SITE + '/products/solar-energy/c-i-energy-storage/high-voltage-energy-storage-battery-160kwh', img: media('HIGH VOLTAGE BATTERY SYSTEM WITH COVER 51.2 V-314 AH-16.webp'), match: ['^HIGH VOLTAGE ENERGY STORAGE BATTERY'] },
     // C10 capacity used for sizing (192 Ah on the datasheet)
     bat({ id: 't220', chem: 'tubular', name: 'Tubular Battery 12V 220Ah C20', v: 12, ah: 192, path: 'tubular-battery-12v-220ah-c20', img: 'tubular-battery-c20.webp', match: ['^TUBULAR BATTERY 12V 220AH'] })
   ];

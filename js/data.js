@@ -109,7 +109,8 @@
     { id: 'backup', label: 'Power backup with solar', hint: 'Keeps the lights on in a power cut and trims the bill' },
     { id: 'grid', label: 'Cut my electricity bill', hint: 'Panels feed your home, no battery' },
     { id: 'off', label: 'No grid at all', hint: 'Solar and batteries run everything' },
-    { id: 'pump', label: 'Solar water pump', hint: 'The pump runs from the sun, no battery' }
+    { id: 'pump', label: 'Solar water pump', hint: 'The pump runs from the sun, no battery' },
+    { id: 'biz', label: 'Business, factory or project', hint: 'Three-phase plants, storage cabinets, any size' }
   ];
 
   var DURATIONS = [
@@ -140,7 +141,9 @@
       gridDcAc: 1.2,        // target solar to inverter ratio for grid-tied systems
       pumpArrayRatio: 1.5,  // solar array watts per pump kW
       panelsPerString: 4,   // typical, used only to estimate connectors and combiner boxes
-      stockCap: 50          // published stock is capped here
+      stockCap: 50,         // published stock is capped here
+      bizAvgShare: 0.6,     // business backup energy uses 60% of the highest load on average
+      bizStartAllowance: 1.25 // motor starts on top of the highest load
     }
   };
 });

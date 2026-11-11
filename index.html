@@ -58,6 +58,28 @@
           <p class="hint">Check the motor plate. 1 HP is about 0.75 kW.</p>
         </div>
 
+        <div class="q" id="q-biz" hidden>
+          <h3 class="q-title"><span class="q-num">2</span>Tell us about the site</h3>
+          <div class="grid-2">
+            <div>
+              <label class="label" for="monthly">Electricity used a month, kWh</label>
+              <input id="monthly" type="number" min="100" step="100" inputmode="numeric">
+              <p class="hint">From the electricity bill.</p>
+            </div>
+            <div>
+              <label class="label" for="peak">Highest load at one time, kW</label>
+              <input id="peak" type="number" min="1" step="1" inputmode="decimal">
+              <p class="hint">From the bill or the main breaker size.</p>
+            </div>
+          </div>
+          <p class="label q-sub" id="bizmode-label">What should it do</p>
+          <div class="chips" role="radiogroup" aria-labelledby="bizmode-label">
+            <label class="chip"><input type="radio" name="bizmode" value="grid"><span class="chip-body"><span class="chip-title">Cut the bill</span><span class="chip-hint">Grid-tied, no battery</span></span></label>
+            <label class="chip"><input type="radio" name="bizmode" value="hybrid"><span class="chip-body"><span class="chip-title">Cut the bill and back up</span><span class="chip-hint">Solar with storage</span></span></label>
+            <label class="chip"><input type="radio" name="bizmode" value="off"><span class="chip-body"><span class="chip-title">Run without grid</span><span class="chip-hint">Remote site or project</span></span></label>
+          </div>
+        </div>
+
         <div class="q">
           <h3 class="q-title"><span class="q-num">3</span>Where are you</h3>
           <label class="sr" for="region">Country</label>

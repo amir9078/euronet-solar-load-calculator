@@ -25,10 +25,10 @@
   /* ---------- state ---------- */
   function defaults() {
     return { goal: 'backup', preset: 'p2', qty: clone(byId(D.PRESETS, 'p2').qty), region: 'ae', duration: 'short', hours: 3,
-      solar: true, coverage: 0.4, psh: 5.5, simult: 0.8, pumpHp: 3, view: 0, filter: 'all', search: '' };
+      solar: true, coverage: 0.4, psh: 5.5, simult: 0.8, pumpHp: 3, monthlyKWh: 25000, peakKW: 80, bizMode: 'hybrid', view: 0, filter: 'all', search: '' };
   }
   var state = defaults();
-  var KEEP = ['goal', 'preset', 'qty', 'region', 'duration', 'hours', 'solar', 'coverage', 'psh', 'simult', 'pumpHp'];
+  var KEEP = ['goal', 'preset', 'qty', 'region', 'duration', 'hours', 'solar', 'coverage', 'psh', 'simult', 'pumpHp', 'monthlyKWh', 'peakKW', 'bizMode'];
 
   function sanitize(src) {
     var s = defaults();
@@ -47,6 +47,9 @@
     if (isFinite(+src.psh)) s.psh = clamp(+src.psh, 3, 7.5);
     if ([0.6, 0.8, 1].indexOf(+src.simult) > -1) s.simult = +src.simult;
     if (D.PUMPS.some(function (p) { return p.hp === +src.pumpHp; })) s.pumpHp = +src.pumpHp;
+    if (+src.monthlyKWh > 0) s.monthlyKWh = clamp(Math.round(+src.monthlyKWh), 100, 5000000);
+    if (+src.peakKW > 0) s.peakKW = clamp(+src.peakKW, 1, 5000);
+    if (['grid', 'hybrid', 'off'].indexOf(src.bizMode) > -1) s.bizMode = src.bizMode;
     return s;
   }
   function keep() { var o = {}; KEEP.forEach(function (k) { o[k] = state[k]; }); return o; }
@@ -67,7 +70,8 @@
   function result() {
     return E.recommend(state.qty, {
       goal: state.goal, region: region().stock, backupHours: state.hours, solar: state.goal === 'off' ? true : state.solar,
-      coverage: state.coverage, psh: state.psh, simult: state.simult, pumpKw: pump().kw
+      coverage: state.coverage, psh: state.psh, simult: state.simult, pumpKw: pump().kw,
+      monthlyKWh: state.monthlyKWh, peakKW: state.peakKW, bizMode: state.bizMode
     }, D, STOCK);
   }
 
@@ -76,6 +80,7 @@
     backup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M10 9l-2 3h4l-2 3"/></svg>',
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/><circle cx="18" cy="4" r="0"/></svg>',
     off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+    biz: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l6 3V10l6 3V6l6 3v12z"/><path d="M7 17h2M12 17h2M17 17h2"/></svg>',
     pump: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5 6 5 10a5 5 0 0 1-10 0c0-4 5-10 5-10z"/></svg>'
   };
 
@@ -107,15 +112,19 @@
 
   function syncControls() {
     var g = state.goal;
-    $('#q-home').hidden = g === 'pump';
+    var biz = g === 'biz';
+    $('#q-home').hidden = g === 'pump' || biz;
+    $('#q-biz').hidden = !biz;
+    $('#monthly').value = state.monthlyKWh; $('#peak').value = state.peakKW;
+    $$('input[name="bizmode"]').forEach(function (r) { r.checked = r.value === state.bizMode; });
     $('#q-pump').hidden = g !== 'pump';
-    $('#q-duration').hidden = g === 'grid' || g === 'pump';
+    $('#q-duration').hidden = g === 'grid' || g === 'pump' || (biz && state.bizMode === 'grid');
     $('#solar-row').hidden = g !== 'backup';
     $('#solar').checked = state.solar;
-    $('#tune-appliances').hidden = g === 'pump';
-    $('#hours-block').hidden = g === 'grid' || g === 'pump';
+    $('#tune-appliances').hidden = g === 'pump' || biz;
+    $('#hours-block').hidden = g === 'grid' || g === 'pump' || (biz && state.bizMode === 'grid');
     $('#coverage-block').hidden = g === 'pump' || (g === 'backup' && !state.solar);
-    $('#together-block').hidden = g === 'pump';
+    $('#together-block').hidden = g === 'pump' || biz;
     $('#hours').value = state.hours; $('#hours-out').textContent = state.hours + ' h';
     $('#coverage').value = Math.round(state.coverage * 100); $('#coverage-out').textContent = Math.round(state.coverage * 100) + '%';
     $('#psh').value = nd(state.psh, 1);
@@ -170,8 +179,17 @@
   }
 
   /* ---------- answer ---------- */
+  var HUBS = { ae: 'EURONET UAE, Dubai', sa: 'EURONET KSA, Riyadh', ng: 'EURONET Nigeria, Lagos' };
+  function qtyAt(id, r) { var it = STOCK && STOCK.items[id]; return it ? it[r] || 0 : 0; }
+  // other Euronet companies that hold enough of an item
+  function elsewhere(id, need) {
+    var here = region().stock;
+    return Object.keys(HUBS).filter(function (r) { return r !== here && qtyAt(id, r) >= need; });
+  }
   function stockChip(item, need, short) {
     if (!short) return '<span class="chip-stock">In stock</span>';
+    var alt = elsewhere(item.id, short);
+    if (alt.length) return '<span class="chip-stock part">' + (need - short > 0 ? (need - short) + ' in stock here, ' : 'Not in stock here, ') + short + ' from ' + esc(alt.map(function (r) { return HUBS[r]; }).join(' or ')) + '</span>';
     if (short < need) return '<span class="chip-stock part">' + (need - short) + ' in stock, ' + short + ' to order</span>';
     return '<span class="chip-stock order">To order</span>';
   }
@@ -187,17 +205,18 @@
   function diagram(sys, res) {
     var inv = sys.inverter.item, L = res.load;
     var family = { 'Pump Inverter': 'Pump drive', 'PV Inverter': 'Grid inverter' }[inv.series] || inv.series.replace(' Series', '');
-    var invLabel = (sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '') + family + ' ' + pw(inv.ratedW);
-    var end = sys.goal === 'pump' ? ['Pump', state.pumpHp + ' HP motor'] : ['Your home', pw(L.runW) + ' running'];
+    var invLabel = (sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '') + (inv.kind === 'ess' ? 'Storage ' : family + ' ') + pw(inv.ratedW);
+    if (sys.extraInverters && sys.extraInverters.length && !sys.acCoupled) invLabel = [sys.inverter].concat(sys.extraInverters).map(function (x) { return x.units + ' x ' + pw(x.item.ratedW); }).join(' + ');
+    var end = sys.goal === 'pump' ? ['Pump', state.pumpHp + ' HP motor'] : sys.goal === 'biz' ? ['Your site', pw(L.runW) + ' highest load'] : ['Your home', pw(L.runW) + ' running'];
     function node(x, y, w, t1, t2) {
       return '<g class="node"><rect x="' + (x - w / 2) + '" y="' + (y - 34) + '" width="' + w + '" height="68" rx="12"/>' +
         '<text class="t1" x="' + x + '" y="' + (y - 4) + '" text-anchor="middle">' + esc(t1) + '</text><text class="t2" x="' + x + '" y="' + (y + 20) + '" text-anchor="middle">' + esc(t2) + '</text></g>';
     }
-    var hasBat = !!sys.battery, hasGrid = sys.goal === 'backup' || sys.goal === 'grid';
+    var hasBat = !!sys.battery, hasGrid = sys.goal === 'backup' || sys.goal === 'grid' || (sys.goal === 'biz' && sys.bizMode !== 'off');
     var left = sys.pv ? [sys.pv.count + ' x ' + sys.pv.panel.wp + ' W', nd(sys.pv.kWp, 2) + ' kWp of panels'] : ['Grid charging', 'no panels'];
     var mid = [invLabel, inv.busV ? inv.busV + ' V battery bus' : (inv.phase === 3 ? 'three-phase' : 'single-phase')];
-    var bat = hasBat ? [sys.battery.units + ' x ' + nd(sys.battery.model.v, 1) + ' V ' + sys.battery.model.ah + ' Ah', kwh(sys.battery.totalKWh) + ' battery'] : null;
-    var grid = hasGrid ? ['Grid', sys.goal === 'grid' ? 'tops up and takes extra' : 'charges when it is on'] : null;
+    var bat = !hasBat ? null : sys.battery.builtIn ? ['Built-in battery', kwh(sys.battery.totalKWh)] : sys.battery.model.chem === 'hv' ? [sys.battery.units + ' x ' + kwh(sys.battery.model.kWh) + ' pack', kwh(sys.battery.totalKWh) + ' at ' + sys.battery.model.v + ' V'] : [sys.battery.units + ' x ' + nd(sys.battery.model.v, 1) + ' V ' + sys.battery.model.ah + ' Ah', kwh(sys.battery.totalKWh) + ' battery'];
+    var grid = hasGrid ? ['Grid', (sys.goal === 'grid' || sys.bizMode === 'grid') ? 'tops up and takes extra' : 'charges when it is on'] : null;
     if ($('#answer').clientWidth < 520) {
       // phone: chain runs top to bottom, battery and grid sit beside it
       var v = '<svg viewBox="0 0 360 320" role="img" aria-label="How the parts connect">';
@@ -217,31 +236,37 @@
     if (hasGrid) s += '<path class="flow grid" d="M552 160 L552 86"/>';
     if (sys.pv) s += node(92, 52, 172, sys.pv.count + ' x ' + sys.pv.panel.wp + ' W', nd(sys.pv.kWp, 2) + ' kWp of panels');
     else s += node(92, 52, 172, 'Grid charging', 'no panels');
-    s += node(320, 52, 196, invLabel, inv.busV ? inv.busV + ' V battery bus' : (inv.phase === 3 ? 'three-phase' : 'single-phase'));
+    s += node(320, 52, 196, mid[0], mid[1]);
     s += node(552, 52, 172, end[0], end[1]);
-    if (hasBat) s += node(320, 194, 196, sys.battery.units + ' x ' + nd(sys.battery.model.v, 1) + ' V ' + sys.battery.model.ah + ' Ah', kwh(sys.battery.totalKWh) + ' battery');
-    if (hasGrid) s += node(552, 194, 172, 'Grid', sys.goal === 'grid' ? 'tops up and takes extra' : 'charges when it is on');
+    if (hasBat) s += node(320, 194, 196, bat[0], bat[1]);
+    if (hasGrid) s += node(552, 194, 172, 'Grid', (sys.goal === 'grid' || sys.bizMode === 'grid') ? 'tops up and takes extra' : 'charges when it is on');
     return '<div class="diagram">' + s + '</svg></div>';
   }
 
   function headline(sys, res) {
     var L = res.load;
     if (sys.goal === 'pump') return 'Runs a ' + state.pumpHp + ' HP pump straight from the sun through the day. No battery needed.';
+    if (sys.goal === 'biz' && sys.bizMode === 'grid') return 'A ' + nd(sys.pv.kWp, 0) + ' kWp plant making about ' + kwh(sys.pv.yieldKWh) + ' a day, around ' + pct(sys.pv.coverage) + ' of what the site uses.';
+    if (sys.goal === 'biz') return 'Carries your ' + pw(L.runW) + ' site for about ' + hrs(sys.battery.runtimeH) + ' on ' + kwh(sys.battery.totalKWh) + ' of storage, with ' + nd(sys.pv.kWp, 0) + ' kWp of solar making about ' + kwh(sys.pv.yieldKWh) + ' a day.';
     if (sys.goal === 'grid') return 'Makes about ' + kwh(sys.pv.yieldKWh) + ' a day, around ' + pct(sys.pv.coverage) + ' of the electricity you use.';
     var t = 'Keeps your ' + pw(L.runW) + ' load going for about ' + hrs(sys.battery.runtimeH) + ' on battery';
     if (sys.pv) t += ', and the panels make about ' + kwh(sys.pv.yieldKWh) + ' a day';
     return t + '.';
   }
 
-  var ALT_NAMES = { lead: 'Lead-acid battery version', outdoor: 'Outdoor IP65 version', lithium: 'Lithium battery version', other: 'Another inverter size' };
+  var ALT_NAMES = { lead: 'Lead-acid battery version', outdoor: 'Outdoor IP65 version', lithium: 'Lithium battery version', other: 'Another inverter mix', first: 'Our first choice, to order', 'fam-lv': 'Low-voltage hybrids in parallel', 'fam-hv': 'Ultra Series with high-voltage battery', 'fam-ess': 'All-in-one storage cabinet' };
 
   function partsHtml(sys) {
     var inv = sys.inverter.item, html = '';
     var invLine = '<b>' + (sys.inverter.units > 1 ? sys.inverter.units + ' units in parallel' : '1 unit') + '</b> &middot; ' + pw(inv.ratedW) + (inv.busV ? ' &middot; ' + inv.busV + ' V battery' : '') + (inv.phase === 3 ? ' &middot; three-phase supply' : '') + ' &middot; ' + esc(inv.ip);
-    html += partRow(inv.kind === 'pump' ? 'Pump drive' : inv.kind === 'ongrid' ? 'Grid-tied inverter' : inv.kind === 'lf' ? 'Backup inverter' : 'Inverter', inv, invLine, sys.inverter.units, sys.inverter.short);
-    if (sys.battery) {
+    if (sys.battery && sys.battery.builtIn) invLine += ' &middot; ' + kwh(sys.battery.totalKWh) + ' battery built in';
+    html += partRow(inv.kind === 'pump' ? 'Pump drive' : inv.kind === 'ongrid' ? 'Grid-tied inverter' : inv.kind === 'lf' ? 'Backup inverter' : inv.kind === 'ess' ? 'Storage cabinet' : 'Inverter', inv, invLine, sys.inverter.units, sys.inverter.short);
+    (sys.extraInverters || []).forEach(function (x) {
+      html += partRow(sys.acCoupled ? 'Solar inverter, AC-coupled' : 'Grid-tied inverter', x.item, '<b>' + x.units + ' &times;</b> ' + pw(x.item.ratedW) + (x.item.phase === 3 ? ' &middot; three-phase' : '') + ' &middot; ' + esc(x.item.ip), x.units, x.short);
+    });
+    if (sys.battery && !sys.battery.builtIn) {
       var b = sys.battery, m = b.model;
-      var wiring = m.chem === 'lfp' ? (b.units > 1 ? b.units + ' in parallel' : 'single unit') : b.parallel + (b.parallel > 1 ? ' strings' : ' string') + ' of ' + b.series + ' for ' + b.busV + ' V';
+      var wiring = m.chem === 'hv' ? (b.units > 1 ? b.units + ' packs in parallel' : 'single pack') + ' on ' + m.v + ' V' : m.chem === 'lfp' ? (b.units > 1 ? b.units + ' in parallel' : 'single unit') : b.parallel + (b.parallel > 1 ? ' strings' : ' string') + ' of ' + b.series + ' for ' + b.busV + ' V';
       html += partRow('Battery', m, '<b>' + b.units + ' &times;</b> ' + wiring + ' &middot; ' + kwh(b.totalKWh) + ' total, ' + kwh(b.usableKWh) + ' usable', b.units, b.short);
     }
     if (sys.pv) html += partRow('Solar panels', sys.pv.panel, '<b>' + sys.pv.count + ' &times; ' + sys.pv.panel.wp + ' W</b> &middot; ' + nd(sys.pv.kWp, 2) + ' kWp &middot; about ' + n0(sys.pv.areaM2) + ' m&sup2; of roof', sys.pv.count, sys.pv.short);
@@ -269,6 +294,8 @@
     if (others.length) {
       rows.push('<li>Other panels in stock ' + others.map(function (o) { return o.avail + ' &times; ' + o.panel.wp + ' W'; }).join(', ') + '. Too few of each to make a string on their own.</li>');
     }
+    var hubs = elsewhere(main.id, f.short);
+    if (hubs.length) rows.push('<li><strong>Or ship them in.</strong> ' + f.short + ' &times; ' + main.wp + ' W are in stock at ' + esc(hubs.map(function (r) { return HUBS[r]; }).join(' and ')) + '.</li>');
     rows.push('<li>Or keep the design and wait for ' + f.short + ' &times; ' + main.wp + ' W from the next shipment.</li>');
     return '<div class="fill"><p class="fill-title">For the ' + f.short + ' panels we are short of</p><ul>' + rows.join('') + '</ul></div>';
   }
@@ -277,7 +304,8 @@
     var t = [];
     if (sys.battery) t.push(['Backup', hrs(sys.battery.runtimeH)]);
     if (sys.pv) t.push(['Solar a day', kwh(sys.pv.yieldKWh)]);
-    if (sys.goal !== 'pump' && sys.goal !== 'grid') t.push(['Inverter load', pct(sys.loadPct)]);
+    if (sys.goal !== 'pump' && sys.goal !== 'grid' && sys.loadPct) t.push(['Inverter load', pct(sys.loadPct)]);
+    if (sys.goal === 'biz' && sys.bizMode === 'grid') { t.push(['Plant size', nd(sys.pv.kWp, 0) + ' kWp']); t.push(['Share of use', pct(sys.pv.coverage)]); }
     if (sys.goal === 'grid') { t.push(['Share of use', pct(sys.pv.coverage)]); t.push(['A month', kwh(sys.pv.monthlyKWh)]); }
     if (sys.goal === 'pump') { t.push(['Drive size', pw(sys.inverter.item.ratedW)]); t.push(['Roof or ground', n0(sys.pv.areaM2) + ' m²']); }
     return '<div class="stats">' + t.slice(0, 3).map(function (x) { return '<div class="stat-tile"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>'; }).join('') + '</div>';
@@ -293,6 +321,15 @@
 
   function notesHtml(sys, res) {
     var n = [];
+    var shortIds = [];
+    if (sys.inverter.short) shortIds.push([sys.inverter.item.id, sys.inverter.units]);
+    (sys.extraInverters || []).forEach(function (x) { if (x.short) shortIds.push([x.item.id, x.units]); });
+    if (sys.battery && sys.battery.short) shortIds.push([sys.battery.model.id, sys.battery.units]);
+    if (sys.pv && sys.pv.short) shortIds.push([sys.pv.panel.id, sys.pv.count]);
+    if (shortIds.length) {
+      var hub = Object.keys(HUBS).filter(function (r) { return r !== region().stock && shortIds.every(function (x) { return qtyAt(x[0], r) >= x[1]; }); })[0];
+      if (hub) n.unshift('Everything missing here is in stock at ' + HUBS[hub] + '. We can ship it from there.');
+    }
     if (!res.fromStock) n.push('Nothing in stock in ' + region().label + ' fits this exactly, so this system uses items we would order for you.');
     if (sys.tight) n.push('The inverter runs close to its limit. Moving a heavy appliance off the battery gives it more room.');
     if (sys.pv && sys.pv.capped) n.push('The inverter takes about ' + pw(sys.inverter.item.pvMaxW * sys.inverter.units) + ' of panels at most, so solar covers ' + pct(sys.pv.coverage) + ' instead of ' + pct(state.coverage) + '.');
@@ -307,11 +344,13 @@
     var r = region(), L = res.load, lines = ['Hello EURONET, I used the solar system finder and would like a quote.', ''];
     lines.push('Goal ' + goal().label + (sys.goal === 'pump' ? ', ' + state.pumpHp + ' HP pump' : ''));
     lines.push((sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '1 x ') + sys.inverter.item.name);
-    if (sys.battery) lines.push(sys.battery.units + ' x ' + sys.battery.model.name + ' (' + kwh(sys.battery.totalKWh) + ')');
+    (sys.extraInverters || []).forEach(function (x) { lines.push(x.units + ' x ' + x.item.name); });
+    if (sys.goal === 'biz') lines.push('Site ' + n0(state.peakKW) + ' kW highest load, ' + n0(state.monthlyKWh) + ' kWh a month');
+    if (sys.battery && !sys.battery.builtIn) lines.push(sys.battery.units + ' x ' + sys.battery.model.name + ' (' + kwh(sys.battery.totalKWh) + ')');
     if (sys.pv) lines.push(sys.pv.count + ' x ' + sys.pv.panel.name + ' (' + nd(sys.pv.kWp, 2) + ' kWp)');
     if (sys.pv && sys.pv.fill) lines.push('(' + sys.pv.fill.inStock + ' in stock' + (sys.pv.fill.readyNow ? ', ready-now option adds ' + sys.pv.fill.readyNow.mix[1].count + ' x ' + sys.pv.fill.readyNow.mix[1].panel.name + ' on the second solar input' : '') + ')');
     sys.kit.forEach(function (k) { lines.push(k.qty + ' x ' + k.item.name); });
-    if (sys.goal !== 'pump') lines.push('', 'Load ' + n0(L.connectedW) + ' W connected, about ' + nd(L.dailyWh / 1000, 1) + ' kWh a day' + (sys.battery ? ', backup ' + hrs(state.hours) : '') + '.');
+    if (sys.goal !== 'pump' && sys.goal !== 'biz') lines.push('', 'Load ' + n0(L.connectedW) + ' W connected, about ' + nd(L.dailyWh / 1000, 1) + ' kWh a day' + (sys.battery ? ', backup ' + hrs(state.hours) : '') + '.');
     lines.push('Country ' + r.label + '.', '', 'My results ' + shareUrl());
     return lines.join('\n');
   }
@@ -321,7 +360,10 @@
     if (sys.goal !== 'pump') s.push('Your appliances add up to ' + pw(L.connectedW) + '. With ' + pct(L.simult) + ' running together that is ' + pw(L.runW) + ', and the biggest motor start takes it to ' + pw(L.peakW) + ' for a moment. In a day they use about ' + kwh(L.dailyWh / 1000) + '.');
     if (sys.battery) {
       s.push('The inverter must carry the running load with room to spare and survive the start. Where a surge rating is published we use it, otherwise the start has to fit inside the rating.');
-      s.push('The battery holds ' + pw(L.avgW) + ' for ' + hrs(state.hours) + ', after ' + pct(A.invEff) + ' inverter efficiency and ' + pct(sys.battery.model.dod) + ' usable depth, plus 15% reserve. It sits on the inverter\'s own ' + sys.battery.busV + ' V and can deliver the running power.');
+      var depthTxt = pct(sys.battery.model.dod || 0.9) + ' usable depth, plus 15% reserve';
+      if (sys.battery.builtIn) s.push('The cabinets hold ' + pw(L.avgW) + ' for ' + hrs(state.hours) + ', after ' + pct(A.invEff) + ' conversion efficiency and ' + depthTxt + '. Each cabinet has its own converter, so power and storage grow together.');
+      else s.push('The battery holds ' + pw(L.avgW) + ' for ' + hrs(state.hours) + ', after ' + pct(A.invEff) + ' inverter efficiency and ' + depthTxt + '. It sits on the inverter\'s own ' + sys.battery.busV + ' V and can deliver the running power.');
+      if (sys.goal === 'biz') s.push('For a site we take ' + pct(A.bizAvgShare) + ' of the highest load as the average during a cut, and allow ' + pct(A.bizStartAllowance - 1) + ' on top for motors starting.');
     }
     if (sys.pv && sys.goal !== 'pump') s.push('Each kWp of panels makes about ' + nd(state.psh * A.perfRatio, 2) + ' kWh a day here, from ' + nd(state.psh, 1) + ' peak sun hours and a ' + pct(A.perfRatio) + ' performance ratio.');
     s.push('We build every combination the stock in ' + region().label + ' allows, keep the ones that do the job, and rank them on fit, lithium life, how much stock backs each part and how few parts it needs. Stock checked ' + stockDate() + '.');
@@ -391,12 +433,16 @@
       state.goal = t.value;
       if (state.goal === 'off') { state.duration = 'night'; state.hours = 14; state.coverage = 1; }
       else if (state.goal === 'grid') state.coverage = 0.7;
+      else if (state.goal === 'biz') state.coverage = state.bizMode === 'off' ? 1 : 0.6;
       else if (state.goal === 'backup') { var d = byId(D.DURATIONS, state.duration) || D.DURATIONS[0]; state.coverage = d.coverage; state.hours = d.hours; }
       $$('input[name="duration"]').forEach(function (r) { r.checked = r.value === state.duration; });
       changed();
     } else if (t.name === 'preset') {
       state.preset = t.value; state.qty = clone(byId(D.PRESETS, t.value).qty); renderAppliances(); changed();
     } else if (t.name === 'pump') { state.pumpHp = +t.value; changed(); }
+    else if (t.name === 'bizmode') { state.bizMode = t.value; state.coverage = t.value === 'off' ? 1 : 0.6; if (t.value === 'off') { state.hours = 14; state.duration = 'night'; } changed(); }
+    else if (t.id === 'monthly') { state.monthlyKWh = clamp(Math.round(+t.value || 0), 100, 5000000); changed(); }
+    else if (t.id === 'peak') { state.peakKW = clamp(+t.value || 0, 1, 5000); changed(); }
     else if (t.name === 'duration') {
       var du = byId(D.DURATIONS, t.value); state.duration = du.id; state.hours = du.hours; state.coverage = state.goal === 'grid' ? state.coverage : du.coverage; changed();
     } else if (t.name === 'together') { state.simult = +t.value; changed(); }

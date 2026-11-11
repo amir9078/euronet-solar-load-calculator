@@ -149,7 +149,7 @@
     var out = [];
     function add(item, qty, why) { if (item && qty > 0) out.push({ item: item, qty: qty, why: why, short: Math.max(0, qty - have(item.id)) }); }
     var inv = sys.inverter.item, u = sys.inverter.units;
-    if (sys.battery) {
+    if (sys.battery && inv.busV) {
       var iDc = 1.25 * inv.ratedW / (inv.busV * 0.9);
       add(pickAccessory(data, have, 'bat-breaker', iDc), u, 'Battery to inverter, sized for ' + Math.round(iDc) + ' A');
     }
@@ -180,6 +180,7 @@
     sys.kit = kit(sys, data, have, A);
     var shortMain = [];
     if (sys.inverter.short) shortMain.push(sys.inverter.item.name);
+    (sys.extraInverters || []).forEach(function (x) { if (x.short) shortMain.push(x.item.name); });
     if (sys.battery && sys.battery.short) shortMain.push(sys.battery.model.name);
     if (sys.pv && sys.pv.short) shortMain.push(sys.pv.panel.name);
     sys.toOrder = shortMain;
@@ -187,22 +188,24 @@
     sys.ready = !shortMain.length;
     var s = 100 + (extra || 0);
     if (sys.inverter.short) s -= 30;
+    (sys.extraInverters || []).forEach(function (x) { if (x.short) s -= 20; });
     if (sys.battery && sys.battery.short) s -= 30;
     if (sys.pv && sys.pv.short) s -= 8 + 15 * sys.pv.short / sys.pv.count;
     s -= sys.kitShort.length;
     s += depth(have(sys.inverter.item.id));
-    if (sys.battery) s += depth(have(sys.battery.model.id) / sys.battery.units);
+    if (sys.battery && !sys.battery.builtIn) s += depth(have(sys.battery.model.id) / sys.battery.units);
     sys.score = s;
     return sys;
   }
 
   /* ---------- goals ---------- */
-  function batterySystems(load, o, data, have, A, strict) {
+  function batterySystems(load, o, data, have, A, strict, biz) {
     var solar = o.goal === 'off' ? true : !!o.solar;
     var out = [];
     var needUse = load.avgW * o.backupHours / A.invEff;
     data.INVERTERS.forEach(function (inv) {
-      if (!(inv.kind === 'hybrid' || inv.kind === 'offgrid' || (inv.kind === 'lf' && !solar))) return;
+      if (!(inv.kind === 'hybrid' || inv.kind === 'offgrid' || (inv.kind === 'lf' && !solar && !biz))) return;
+      if (inv.business && !biz) return;
       var units = 0, tight = false;
       for (var u = 1; u <= inv.parallelMax && !units; u++) {
         var rated = inv.ratedW * u, surge = (inv.surgeW || inv.ratedW) * u;
@@ -300,14 +303,135 @@
     return out;
   }
 
+  /* ---------- business, factory and project systems ---------- */
+
+  // grid-tied inverter mixes for an array of needW, one or two models
+  function gridPlants(needW, data, have, strict, allowSingle) {
+    var models = data.INVERTERS.filter(function (i) { return i.kind === 'ongrid' && (allowSingle || i.phase === 3); })
+      .sort(function (a, b) { return b.ratedW - a.ratedW; });
+    var plans = [];
+    function tryPlan(parts) {
+      var rated = parts.reduce(function (t, p) { return t + p.item.ratedW * p.units; }, 0);
+      var ratio = needW / rated;
+      if (ratio < 0.8 || ratio > 1.3) return;
+      var short = 0;
+      parts.forEach(function (p) { p.short = Math.max(0, p.units - have(p.item.id)); short += p.short; });
+      if (strict && short) return;
+      var units = parts.reduce(function (t, p) { return t + p.units; }, 0);
+      plans.push({ parts: parts, ratedW: rated, ratio: ratio, score: -Math.abs(ratio - 1.2) * 20 - short * 25 - (units - 1) * 1.5 });
+    }
+    models.forEach(function (m, i) {
+      var n0 = Math.max(1, Math.round(needW / (1.2 * m.ratedW)));
+      [n0 - 1, n0, n0 + 1].forEach(function (n) { if (n >= 1 && n <= 40) tryPlan([{ item: m, units: n }]); });
+      models.slice(i + 1).forEach(function (m2) {
+        var a = Math.floor(needW / (1.2 * m.ratedW));
+        if (a < 1 || a > 40) return;
+        var rem = needW / 1.2 - a * m.ratedW;
+        var b = Math.max(1, Math.ceil(rem / m2.ratedW));
+        if (b <= 6) tryPlan([{ item: m, units: a }, { item: m2, units: b }]);
+      });
+    });
+    plans.sort(function (x, y) { return y.score - x.score; });
+    return plans;
+  }
+
+  function plantSystem(plan, needW, load, o, data, have, A, strict, extra) {
+    var pick = panelsFor(data, have, needW, plan.ratedW * 1.3, strict);
+    var pv = pvSummary(pick, load.dailyWh, o.psh, A);
+    pv.target = o.coverage;
+    var trackers = plan.parts.reduce(function (t, p) { return t + p.item.trackers * p.units; }, 0);
+    pv.fill = fillFor(pv, data, have, needW, plan.ratedW * 1.3, trackers, load.dailyWh, o.psh, A);
+    var head = plan.parts[0];
+    return {
+      inverter: { item: head.item, units: head.units, short: head.short },
+      extraInverters: plan.parts.slice(1).map(function (p) { return { item: p.item, units: p.units, short: p.short }; }),
+      plantW: plan.ratedW, pv: pv, dcAc: pv.kWp * 1000 / plan.ratedW, score0: plan.score + (extra || 0)
+    };
+  }
+
+  function businessSystems(load, o, data, have, A, strict) {
+    var out = [];
+    var needPvW = o.coverage * load.dailyWh / (o.psh * A.perfRatio);
+    if (o.bizMode === 'grid') {
+      gridPlants(needPvW, data, have, strict, needPvW < 6500).slice(0, 6).forEach(function (plan) {
+        var sys = plantSystem(plan, needPvW, load, o, data, have, A, strict);
+        sys.goal = 'biz'; sys.bizMode = 'grid';
+        out.push(finish(sys, data, have, A, sys.score0));
+      });
+      return out;
+    }
+    var off = o.bizMode === 'off';
+    var nominal = load.avgW * o.backupHours / A.invEff / 0.9 * 1.15;
+
+    // 1. low-voltage hybrids, paralleled where the datasheet allows
+    batterySystems(load, { goal: off ? 'off' : 'backup', backupHours: o.backupHours, solar: true, coverage: o.coverage, psh: o.psh }, data, have, A, strict, true)
+      .forEach(function (s) { s.goal = 'biz'; s.bizMode = o.bizMode; out.push(s); });
+
+    // 2. Ultra Series with high-voltage packs
+    data.INVERTERS.filter(function (i) { return i.kind === 'hv'; }).forEach(function (inv) {
+      var units = 0, tight = false;
+      for (var u = 1; u <= inv.parallelMax && !units; u++) if (load.runW <= inv.ratedW * u * 0.8 && load.peakW <= inv.ratedW * u) units = u;
+      for (u = 1; u <= inv.parallelMax && !units; u++) if (load.runW <= inv.ratedW * u * 0.95 && load.peakW <= inv.ratedW * u) { units = u; tight = true; }
+      if (!units) return;
+      var invShort = Math.max(0, units - have(inv.id));
+      if (strict && invShort) return;
+      data.BATTERIES.filter(function (b) { return b.chem === 'hv'; }).forEach(function (m) {
+        var n = Math.max(1, Math.ceil(nominal / (m.kWh * 1000)));
+        if (n > m.maxPar) return;
+        var bShort = Math.max(0, n - have(m.id));
+        if (strict && bShort) return;
+        var usable = n * m.kWh * m.dod * 1000;
+        var pick = panelsFor(data, have, needPvW, inv.pvMaxW * units, strict);
+        var pv = pvSummary(pick, load.dailyWh, o.psh, A); pv.target = o.coverage;
+        pv.fill = fillFor(pv, data, have, needPvW, inv.pvMaxW * units, inv.trackers * units, load.dailyWh, o.psh, A);
+        var L = load.runW / (inv.ratedW * units);
+        var x = 4 - Math.max(0, L - 0.75) * 80 - Math.max(0, pv.target - pv.coverage) * 40 - (units - 1) * 1.5 - (tight ? 5 : 0) - Math.max(0, usable / nominal / 0.9 - 1.5) * 6;
+        out.push(finish({
+          goal: 'biz', bizMode: o.bizMode, inverter: { item: inv, units: units, short: invShort },
+          battery: { model: m, units: n, series: 1, parallel: n, busV: m.v, hv: true, totalKWh: n * m.kWh, usableKWh: usable / 1000, needKWh: nominal / 1000, runtimeH: usable * A.invEff / load.avgW, short: bShort },
+          pv: pv, loadPct: L, peakPct: load.peakW / (inv.ratedW * units), tight: tight
+        }, data, have, A, x));
+      });
+    });
+
+    // 3. all-in-one storage cabinets, with built-in or AC-coupled solar
+    data.INVERTERS.filter(function (i) { return i.kind === 'ess' && (!off || i.offgrid); }).forEach(function (m) {
+      var units = Math.max(Math.ceil(load.runW / (m.ratedW * 0.8)), Math.ceil(load.peakW / m.ratedW), Math.ceil(nominal / (m.kWh * 1000)));
+      if (units > m.parallelMax) return;
+      var invShort = Math.max(0, units - have(m.id));
+      if (strict && invShort) return;
+      var usable = units * m.kWh * 0.9 * 1000;
+      var sys = { goal: 'biz', bizMode: o.bizMode, inverter: { item: m, units: units, short: invShort },
+        battery: { model: m, builtIn: true, units: units, totalKWh: units * m.kWh, usableKWh: usable / 1000, needKWh: nominal / 1000, runtimeH: usable * A.invEff / load.avgW, short: 0 },
+        loadPct: load.runW / (m.ratedW * units), peakPct: load.peakW / (m.ratedW * units), tight: false };
+      var x = 2 - Math.max(0, usable / nominal / 0.9 - 1.5) * 6;
+      if (m.pvMaxW) {
+        var pick = panelsFor(data, have, needPvW, m.pvMaxW * units, strict);
+        sys.pv = pvSummary(pick, load.dailyWh, o.psh, A); sys.pv.target = o.coverage;
+        sys.pv.fill = fillFor(sys.pv, data, have, needPvW, m.pvMaxW * units, m.trackers * units, load.dailyWh, o.psh, A);
+      } else {
+        var plan = gridPlants(needPvW, data, have, strict, needPvW < 6500)[0];
+        if (!plan) return;
+        var plant = plantSystem(plan, needPvW, load, o, data, have, A, strict);
+        sys.pv = plant.pv;
+        sys.extraInverters = [{ item: plant.inverter.item, units: plant.inverter.units, short: plant.inverter.short }].concat(plant.extraInverters);
+        sys.acCoupled = true;
+      }
+      x -= Math.max(0, sys.pv.target - sys.pv.coverage) * 40;
+      out.push(finish(sys, data, have, A, x));
+    });
+    return out;
+  }
+
   function search(load, o, data, have, A, strict) {
     if (o.goal === 'pump') return pumpSystems(o, data, have, A, strict);
     if (o.goal === 'grid') return gridSystems(load, o, data, have, A, strict);
+    if (o.goal === 'biz') return businessSystems(load, o, data, have, A, strict);
     return batterySystems(load, o, data, have, A, strict);
   }
 
   function sameSystem(a, b) {
-    return a && b && a.inverter.item.id === b.inverter.item.id && (a.battery ? a.battery.model.id : '') === (b.battery ? b.battery.model.id : '');
+    return a && b && a.inverter.item.id === b.inverter.item.id && a.inverter.units === b.inverter.units && (a.battery ? a.battery.model.id : '') === (b.battery ? b.battery.model.id : '');
   }
 
   function recommend(qty, opts, data, stock) {
@@ -315,11 +439,19 @@
     var have = stockFn(stock, opts.region || 'ae');
     var o = {
       goal: opts.goal || 'backup', backupHours: opts.backupHours, solar: opts.solar, coverage: opts.coverage,
-      psh: opts.psh, pumpKw: opts.pumpKw
+      psh: opts.psh, pumpKw: opts.pumpKw, bizMode: opts.bizMode || 'hybrid'
     };
-    var load = computeLoad(qty, data, opts.simult);
-    var res = { load: load, goal: o.goal, opts: o, best: null, alternatives: [], expert: false, fromStock: true };
-    if (o.goal !== 'pump') {
+    var load;
+    if (o.goal === 'biz') {
+      // business: highest load and monthly use instead of an appliance list
+      var runW = Math.max(1, (opts.peakKW || 0) * 1000);
+      load = { count: 1, items: [], simult: 1, connectedW: runW, runW: runW, avgW: runW * A.bizAvgShare, heavyW: 0,
+        surgeExtraW: runW * (A.bizStartAllowance - 1), surgeFrom: null, peakW: runW * A.bizStartAllowance, dailyWh: (opts.monthlyKWh || 0) * 1000 / 30 };
+    } else load = computeLoad(qty, data, opts.simult);
+    var res = { load: load, goal: o.goal, opts: o, best: null, alternatives: [], expert: false, fromStock: true, firstChoice: null };
+    if (o.goal === 'biz') {
+      if (!(opts.peakKW > 0) || !(opts.monthlyKWh > 0)) return res;
+    } else if (o.goal !== 'pump') {
       if (!load.count) return res;
       if (load.connectedW > A.maxConnectedW) { res.expert = true; return res; }
     }
@@ -329,21 +461,31 @@
     all.sort(function (a, b) { return b.score - a.score; });
     res.best = all[0];
     res.best.label = 'best';
+
+    // what we would pick with every product on the shelf, shown when stock forced a different answer
+    var ideal = search(load, o, data, function () { return 1e9; }, A, false).sort(function (a, b) { return b.score - a.score; })[0];
+    if (ideal && !sameSystem(ideal, res.best)) {
+      var again = search(load, o, data, have, A, false).filter(function (s) { return sameSystem(s, ideal) && (!s.pv || !ideal.pv || s.pv.panel.id === ideal.pv.panel.id); })[0]
+        || search(load, o, data, have, A, false).filter(function (s) { return sameSystem(s, ideal); })[0];
+      if (again && !again.ready) { again.label = 'first'; res.firstChoice = again; }
+    }
+
+    var fam = function (s) { return s.inverter.item.kind === 'ess' ? 'ess' : s.inverter.item.kind === 'hv' ? 'hv' : 'lv'; };
+    function push(c, label) {
+      if (c && !sameSystem(c, res.best) && !res.alternatives.some(function (x) { return sameSystem(x, c); })) { c.label = label; res.alternatives.push(c); }
+    }
     if (o.goal === 'backup' || o.goal === 'off') {
       var lead = all.filter(function (s) { return s.battery.model.chem !== 'lfp'; })[0];
       var outdoor = all.filter(function (s) { return s.inverter.item.ip === 'IP65' && s.battery.model.chem === 'lfp'; })[0];
       var lfpAlt = all.filter(function (s) { return s.battery.model.chem === 'lfp'; })[0];
-      var cands = res.best.battery.model.chem === 'lfp' ? [lead, outdoor] : [lfpAlt, outdoor];
-      cands.forEach(function (c, i) {
-        if (c && !sameSystem(c, res.best) && !res.alternatives.some(function (x) { return sameSystem(x, c); })) {
-          c.label = c.battery.model.chem === 'lfp' ? (c.inverter.item.ip === 'IP65' && i === 1 ? 'outdoor' : 'lithium') : 'lead';
-          res.alternatives.push(c);
-        }
-      });
+      if (res.best.battery.model.chem === 'lfp') { push(lead, 'lead'); push(outdoor, 'outdoor'); }
+      else { push(lfpAlt, 'lithium'); push(outdoor, 'outdoor'); }
+    } else if (o.goal === 'biz' && o.bizMode !== 'grid') {
+      ['lv', 'hv', 'ess'].forEach(function (f) { if (f !== fam(res.best)) push(all.filter(function (s) { return fam(s) === f; })[0], 'fam-' + f); });
     } else {
-      var other = all.filter(function (s) { return s.inverter.item.id !== res.best.inverter.item.id; })[0];
-      if (other) { other.label = 'other'; res.alternatives.push(other); }
+      push(all.filter(function (s) { return s.inverter.item.id !== res.best.inverter.item.id; })[0], 'other');
     }
+    if (res.firstChoice) res.alternatives.unshift(res.firstChoice);
     return res;
   }
 
