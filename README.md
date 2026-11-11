@@ -22,7 +22,7 @@ For the chosen country it builds every inverter, battery and panel combination t
 
 ## Stock
 
-`data/stock.json` is public and holds only free stock (on hand minus reserved) for catalogue items, capped at 50, per selling company. The UAE, Sudan and every other country use EURONET UAE, Saudi Arabia uses EURONET KSA and Nigeria uses EURONET NIGERIA. No costs, prices or warehouse locations.
+`data/stock.json` is public and holds only free stock (on hand minus reserved) for catalogue items, capped at 50, per selling company. The UAE and every other country use EURONET UAE, Saudi Arabia uses EURONET KSA and Nigeria uses EURONET NIGERIA. No costs, prices or warehouse locations.
 
 To refresh it
 

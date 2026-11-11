@@ -99,7 +99,6 @@
   var REGIONS = [
     { id: 'ae', stock: 'ae', label: 'United Arab Emirates', psh: 5.5, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' },
     { id: 'sa', stock: 'sa', label: 'Saudi Arabia', psh: 5.8, phone: '+966 58 133 0529', wa: '966581330529', office: 'Riyadh' },
-    { id: 'sd', stock: 'ae', label: 'Sudan', psh: 5.8, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' },
     { id: 'ng', stock: 'ng', label: 'Nigeria', psh: 4.8, phone: '+234 916 304 1000', wa: '2349163041000', office: 'Lagos' },
     { id: 'xx', stock: 'ae', label: 'Another country', psh: 5.0, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' }
   ];
