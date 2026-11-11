@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Solar Load Calculator | EURONET</title>
-  <meta name="description" content="Pick your appliances, say how often the power goes, and get three complete Euronet solar systems with the exact inverter, battery and panels.">
+  <title>Solar System Finder | EURONET</title>
+  <meta name="description" content="Tell us what you need and get the best EURONET solar system from what is in stock, with the inverter, batteries, panels and fitting kit.">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#2E3091">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <a class="skip" href="#main">Skip to the calculator</a>
+  <a class="skip" href="#ask">Skip to the questions</a>
 
   <header class="site-header">
     <div class="wrap header-row">
@@ -29,144 +29,102 @@
   </header>
 
   <main id="main">
-    <section class="hero">
+    <section class="hero hero-tight">
       <div class="wrap">
-        <p class="eyebrow">Solar load calculator</p>
-        <h1>Size your solar and battery backup in two minutes</h1>
-        <p class="lead">Choose your appliances, tell us how the power behaves where you live, and get three complete Euronet systems. Each one names the exact inverter, battery and panels, and shows what it will cover.</p>
-        <ul class="facts" aria-label="What you get">
-          <li>Real Euronet models</li>
-          <li>Motor start surge checked</li>
-          <li>Battery voltage matched</li>
-          <li>No sign-up</li>
-        </ul>
+        <p class="eyebrow">Solar system finder</p>
+        <h1>The right solar system, from what we have in stock</h1>
+        <p class="lead">Answer three quick questions. We match your need to EURONET products sitting in our warehouse today and show one best system, ready to quote.</p>
       </div>
     </section>
 
-    <div class="wrap">
-      <ol class="stepper" id="stepper" aria-label="Progress">
-        <li><button type="button" data-go="1" class="step-btn"><span class="num">1</span><span class="txt">Your appliances</span></button></li>
-        <li><button type="button" data-go="2" class="step-btn"><span class="num">2</span><span class="txt">Your power</span></button></li>
-        <li><button type="button" data-go="3" class="step-btn"><span class="num">3</span><span class="txt">Your systems</span></button></li>
-      </ol>
+    <div class="wrap layout">
+      <section id="ask" class="ask" aria-labelledby="h-ask" tabindex="-1">
+        <h2 id="h-ask" class="sr">Your needs</h2>
 
-      <!-- STEP 1 -->
-      <section id="step1" class="panel" aria-labelledby="h-step1" tabindex="-1">
-        <h2 id="h-step1">What needs to keep running</h2>
-        <p class="sub">Start with the closest home type. Then adjust the counts. Heavy items such as air conditioners and water heaters make the biggest difference.</p>
-
-        <div class="block">
-          <h3 class="label" id="preset-label">Home type</h3>
-          <div class="chips" id="presets" role="radiogroup" aria-labelledby="preset-label"></div>
+        <div class="q">
+          <h3 class="q-title"><span class="q-num">1</span>What do you want solar for</h3>
+          <div class="goals" id="goals" role="radiogroup" aria-label="What do you want solar for"></div>
         </div>
 
-        <div class="toolbar">
-          <div class="seg" role="group" aria-label="Show appliances" id="filter">
-            <button type="button" aria-pressed="true" data-filter="all">All</button>
-            <button type="button" aria-pressed="false" data-filter="everyday">Everyday</button>
-            <button type="button" aria-pressed="false" data-filter="heavy">Heavy</button>
+        <div class="q" id="q-home">
+          <h3 class="q-title"><span class="q-num">2</span>What should it power</h3>
+          <div class="chips" id="presets" role="radiogroup" aria-label="Home type"></div>
+          <p class="hint" id="home-hint"></p>
+        </div>
+
+        <div class="q" id="q-pump" hidden>
+          <h3 class="q-title"><span class="q-num">2</span>How big is the pump motor</h3>
+          <div class="chips chips-tight" id="pumps" role="radiogroup" aria-label="Pump motor size"></div>
+          <p class="hint">Check the motor plate. 1 HP is about 0.75 kW.</p>
+        </div>
+
+        <div class="q">
+          <h3 class="q-title"><span class="q-num">3</span>Where are you</h3>
+          <label class="sr" for="region">Country</label>
+          <select id="region"></select>
+          <div id="q-duration">
+            <p class="label q-sub" id="dur-label">When the power goes, it should last</p>
+            <div class="chips" id="durations" role="radiogroup" aria-labelledby="dur-label"></div>
           </div>
-          <label class="search">
-            <span class="sr">Search appliances</span>
-            <input id="search" type="search" placeholder="Search appliances" autocomplete="off">
-          </label>
-        </div>
-
-        <div id="appliances" class="appliances"></div>
-        <p id="no-match" class="empty" hidden>Nothing matches that search. Try a shorter word.</p>
-
-        <div class="nav-row">
-          <p class="hint" id="need-one" hidden>Add at least one appliance to continue.</p>
-          <button type="button" class="btn btn-primary" data-go="2" id="to2" aria-describedby="need-one">Next, your power</button>
-        </div>
-      </section>
-
-      <!-- STEP 2 -->
-      <section id="step2" class="panel" aria-labelledby="h-step2" tabindex="-1" hidden>
-        <h2 id="h-step2">How the power behaves where you are</h2>
-        <p class="sub">These answers set the battery size and how much of your daily use the panels should cover.</p>
-
-        <div class="grid-2">
-          <div class="block">
-            <label class="label" for="region">Country</label>
-            <select id="region"></select>
-            <p class="hint" id="region-hint"></p>
-          </div>
-          <div class="block">
-            <h3 class="label" id="together-label">How much runs at the same time</h3>
-            <div class="radio-list" id="together" role="radiogroup" aria-labelledby="together-label"></div>
+          <div class="switch-row" id="solar-row">
+            <input id="solar" type="checkbox" role="switch">
+            <label for="solar">Add solar panels</label>
           </div>
         </div>
 
-        <div class="block">
-          <h3 class="label" id="grid-label">What is your power like</h3>
-          <div class="cards3" id="grid" role="radiogroup" aria-labelledby="grid-label"></div>
-        </div>
-
-        <div class="grid-2">
-          <div class="block">
-            <label class="label" for="hours">Hours the battery should carry your load</label>
-            <div class="range-row">
-              <input id="hours" type="range" min="1" max="24" step="1">
-              <output id="hours-out" for="hours"></output>
+        <details class="more tune" id="tune">
+          <summary>Fine-tune appliances and numbers</summary>
+          <div class="more-body">
+            <div id="tune-appliances">
+              <div class="toolbar">
+                <div class="seg" role="group" aria-label="Show appliances" id="filter">
+                  <button type="button" aria-pressed="true" data-filter="all">All</button>
+                  <button type="button" aria-pressed="false" data-filter="everyday">Everyday</button>
+                  <button type="button" aria-pressed="false" data-filter="heavy">Heavy</button>
+                </div>
+                <label class="search">
+                  <span class="sr">Search appliances</span>
+                  <input id="search" type="search" placeholder="Search appliances" autocomplete="off">
+                </label>
+              </div>
+              <div id="appliances" class="appliances"></div>
+              <p id="no-match" class="empty" hidden>Nothing matches that search. Try a shorter word.</p>
             </div>
-            <p class="hint" id="hours-hint"></p>
-          </div>
 
-          <div class="block">
-            <div class="switch-row">
-              <input id="solar" type="checkbox" role="switch">
-              <label for="solar">Add solar panels</label>
-            </div>
-            <p class="hint" id="solar-hint"></p>
-            <div id="coverage-wrap">
-              <label class="label" for="coverage">Share of your daily use that solar should cover</label>
-              <div class="range-row">
-                <input id="coverage" type="range" min="10" max="100" step="5">
-                <output id="coverage-out" for="coverage"></output>
+            <div class="grid-2 tune-numbers">
+              <div class="block" id="hours-block">
+                <label class="label" for="hours">Hours the battery should carry your load</label>
+                <div class="range-row"><input id="hours" type="range" min="1" max="24" step="1"><output id="hours-out" for="hours"></output></div>
+              </div>
+              <div class="block" id="coverage-block">
+                <label class="label" for="coverage">Share of your daily use from solar</label>
+                <div class="range-row"><input id="coverage" type="range" min="10" max="100" step="5"><output id="coverage-out" for="coverage"></output></div>
+              </div>
+              <div class="block" id="together-block">
+                <p class="label" id="together-label">How much runs at the same time</p>
+                <div class="radio-list" id="together" role="radiogroup" aria-labelledby="together-label"></div>
+              </div>
+              <div class="block">
+                <label class="label" for="psh">Peak sun hours a day</label>
+                <input id="psh" type="number" min="3" max="7.5" step="0.1" inputmode="decimal">
+                <p class="hint">A planning average for tilted panels. It resets when you change the country.</p>
               </div>
             </div>
           </div>
-        </div>
-
-        <details class="more">
-          <summary>Fine-tune the sunshine hours</summary>
-          <div class="more-body">
-            <label class="label" for="psh">Peak sun hours per day</label>
-            <input id="psh" type="number" min="3" max="7.5" step="0.1" inputmode="decimal">
-            <p class="hint">A planning average for panels tilted towards the sun. It resets when you change the country. Your installer can refine it for your roof.</p>
-          </div>
         </details>
-
-        <div class="nav-row">
-          <button type="button" class="btn btn-ghost" data-go="1">Back</button>
-          <button type="button" class="btn btn-primary" id="show-results">Show my 3 systems</button>
-        </div>
       </section>
 
-      <!-- STEP 3 -->
-      <section id="step3" class="panel panel-wide" aria-labelledby="h-step3" tabindex="-1" hidden>
-        <div class="results-head">
-          <div>
-            <h2 id="h-step3">Your three systems</h2>
-            <p class="sub" id="results-sub"></p>
-          </div>
-          <div class="actions-top">
-            <button type="button" class="btn btn-small btn-ghost" data-go="1">Change appliances</button>
-            <button type="button" class="btn btn-small btn-ghost" data-go="2">Change power</button>
-          </div>
-        </div>
-
-        <div id="results"></div>
+      <section id="answer" class="answer" aria-labelledby="h-answer" aria-live="polite" tabindex="-1">
+        <h2 id="h-answer" class="sr">Your system</h2>
+        <div id="answer-body"><p class="loading">Checking what is in stock</p></div>
       </section>
     </div>
   </main>
 
-  <div class="summary-bar" id="summary-bar" role="region" aria-label="Your load so far">
-    <div class="wrap summary-row" aria-live="polite">
-      <div class="stat"><span class="stat-label">Connected</span><span class="stat-val" id="s-conn">0 W</span></div>
-      <div class="stat"><span class="stat-label">Running together</span><span class="stat-val" id="s-run">0 W</span></div>
-      <div class="stat"><span class="stat-label">Daily energy</span><span class="stat-val" id="s-day">0 kWh</span></div>
+  <div class="jump" id="jump" role="region" aria-label="Your system shortcut">
+    <div class="wrap jump-row">
+      <span id="jump-text">Your system</span>
+      <a class="btn btn-small btn-primary" href="#answer">See it</a>
     </div>
   </div>
 
@@ -178,6 +136,7 @@
   </footer>
 
   <script src="js/data.js"></script>
+  <script src="js/catalog.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/app.js"></script>
 </body>

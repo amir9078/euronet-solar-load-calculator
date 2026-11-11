@@ -2,3 +2,4 @@ _research/
 .claude/
 node_modules/
 *.log
+_data/

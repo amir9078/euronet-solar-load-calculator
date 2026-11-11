@@ -1,59 +1,45 @@
-# EURONET Solar Load Calculator
+# EURONET Solar System Finder
 
-A load calculator for the [EURONET solar range](https://www.euronetworld.com/products/solar-energy). A customer picks their appliances, says how the power behaves where they live, and gets three complete systems. Each one names the exact inverter, battery bank and solar panels, with quantities, and shows what it will cover.
+Answer three questions and get the best EURONET solar system **from what is in stock** in your country, with the inverter, batteries, panels and a fitting kit, ready to quote on WhatsApp or email.
 
-Plain HTML, CSS and JavaScript. No build step and no server, so it runs on GitHub Pages as it is.
+Plain HTML, CSS and JavaScript. No build step, so it runs on GitHub Pages as it is.
 
-## How it sizes a system
+## What it covers
 
-1. **Load.** Connected watts, the share that runs together, the largest motor start (compressors and pumps draw more when they start), and daily energy from each appliance's power, duty cycle and usual hours.
-2. **Inverter.** The smallest unit whose rating carries the running load with headroom for the level, and whose surge rating covers the peak. Where a surge rating is not published the peak must fit inside the continuous rating.
-3. **Battery.** A bank on the inverter's own voltage that holds the backup energy and can deliver the running power. Gel is used to 50% depth and lithium to 90%.
-4. **Solar.** Panels that make the share of daily use the customer wants, at the country's sun hours and a 75% performance ratio, capped by what the inverter's solar input can take. If the cap blocks the goal, it moves up to a larger inverter.
+| Goal | What it builds |
+| --- | --- |
+| Power backup with solar | Hybrid or off-grid inverter, battery bank on the inverter's voltage, panels. Without panels it can also use LF backup inverters |
+| Cut my electricity bill | Grid-tied PV inverter (5 to 120 kW) and panels, no battery |
+| No grid at all | Inverter, battery and enough panels for the whole day |
+| Solar water pump | Pump drive sized to the motor, panels at 1.5 times the motor power |
 
-The three levels are Essential (gel batteries), Best Fit (lithium) and Future-proof (IP65 inverter and lithium with more headroom). The full workings and assumptions are shown on the results page under "How we worked this out".
+The catalogue (`js/catalog.js`) holds 40 inverters across the A, Shark, Onyx, RS, S, RSZ, Pro IP65, LF, PV and pump ranges, 27 batteries (lithium, gel Blue, Eco and FT, tubular), 6 panels and 14 fitting kit parts. Parallel inverters are used where the datasheet allows it (RSZ up to 9, Pro 10 and 16 kW up to 6).
 
-## Where the product data comes from
+## How it picks
 
-Figures are taken from the published EURONET product records and datasheets on euronetworld.com (read on 3 November 2026). Panels are limited to the 450 W and 540 W models because those are the ones with published voltage and size data. Prices are deliberately not shown.
+For the chosen country it builds every inverter, battery and panel combination the stock allows, keeps the ones that carry the running load and motor start, hold the backup energy on the right battery voltage and reach the solar goal, then scores them on fit, lithium life, stock depth and part count. The best one is shown first, with up to two alternatives (lead-acid battery version, outdoor IP65 version). If nothing in stock fits, it says so and proposes items to order.
 
-Values marked as estimates in `js/data.js` are derived rather than published. For example, a solar input limit worked out from charge current when the datasheet does not state one.
+## Stock
 
-## Change the products
+`data/stock.json` is public and holds only free stock (on hand minus reserved) per country for catalogue items, capped at 50. No costs, prices or warehouse locations.
 
-Everything the engine knows about a product is in `js/data.js`. Add or edit an object in `INVERTERS`, `BATTERIES` or `PANELS`, then list its `id` in a tier's ladder under `TIERS`. No other file needs to change.
+To refresh it
 
-## Run it
+1. Export products and stock quants for the solar categories from Odoo into `_data/odoo-stock.json` (git-ignored, never committed). The format is in `scripts/build-stock.mjs`.
+2. Run `node scripts/build-stock.mjs`. It prints which catalogue items it found and which in-stock Odoo items are not in the catalogue yet (`--unmatched`).
+3. Commit `data/stock.json` and push. GitHub Pages updates in about 30 seconds.
 
-Open `index.html` through any static server, for example
-
-```
-python -m http.server 8195
-```
-
-## Test it
+## Test
 
 ```
 node tests/engine.test.mjs
-node tests/show.mjs
+node tests/show.mjs ae,sa,ng backup,off,grid,pump
 ```
 
-The first runs the sizing checks, including a 2 BHK worked by hand and invariants across every preset, grid situation and solar choice. The second prints what each preset would be sold.
-
-## Files
-
-| Path | What it is |
-| --- | --- |
-| `index.html` | Page structure |
-| `css/style.css` | Styles |
-| `js/data.js` | Appliances, countries and EURONET products |
-| `js/engine.js` | Sizing engine with no DOM code |
-| `js/app.js` | Interface |
-| `tests/` | Engine tests |
-
-Results can be shared as a link. The link carries the selections in the URL hash, so it works without a server.
+The first runs about 400 checks across every country, goal, home type, backup length and pump size. The second prints what each case would be sold.
 
 ## Notes
 
-- The page is set to `noindex` while it lives on github.io. Remove the robots meta tag in `index.html` when it moves to euronetworld.com.
-- Indicative sizing for pre-sales guidance. A site survey sets the final design.
+- Figures come from the EURONET datasheets and product records. Solar input limits that are not published are estimated from charge current and flagged on screen.
+- The LF 5500VA and PV 8 kW are left out because their datasheet figures are missing or unclear.
+- The page is `noindex` while it lives on github.io.

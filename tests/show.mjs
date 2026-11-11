@@ -1,21 +1,26 @@
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 const require = createRequire(import.meta.url);
-const data = require('../js/data.js');
+const data = Object.assign({}, require('../js/data.js'), require('../js/catalog.js'));
 const engine = require('../js/engine.js');
+const stock = JSON.parse(fs.readFileSync(new URL('../data/stock.json', import.meta.url), 'utf8'));
 
-const only = process.argv[2];
-for (const preset of data.PRESETS.filter(p => p.id !== 'p0')) {
-  for (const g of data.GRID_SITUATIONS) {
-    if (only && !(preset.id === only || g.id === only)) continue;
-    const opts = { backupHours: g.hours, solar: true, coverage: g.coverage, psh: 5.5, simult: 0.8 };
-    const r = engine.sizeAll(preset.qty, opts, data);
-    const L = r.load;
-    console.log(`\n${preset.label} / ${g.label} (${g.hours} h, solar ${Math.round(g.coverage * 100)}%)  connected ${L.connectedW} W, running ${Math.round(L.runW)} W, peak ${Math.round(L.peakW)} W, daily ${(L.dailyWh / 1000).toFixed(1)} kWh`);
-    for (const t of r.tiers) {
-      if (t.unavailable) { console.log(`  ${t.tier.label.padEnd(13)} UNAVAILABLE (${t.reason})`); continue; }
-      const b = t.battery;
-      const bank = `${b.units} x ${b.model.v}V ${b.model.ah}Ah ${b.model.chem}`;
-      console.log(`  ${t.tier.label.padEnd(13)} ${t.inverter.model.padEnd(20)} ${String(t.inverter.ratedW).padStart(5)} W ${String(t.inverter.busV).padStart(2)}V load ${Math.round(t.loadPct * 100)}% | ${bank.padEnd(24)} ${b.totalKWh.toFixed(1)} kWh -> ${b.runtimeH.toFixed(1)} h | ${t.pv ? t.pv.count + ' x ' + t.pv.panel.wp + ' W = ' + t.pv.kWp.toFixed(2) + ' kWp, covers ' + Math.round(t.pv.coverage * 100) + '%, ' + t.pv.areaM2.toFixed(0) + ' m2' : 'no solar'} ${t.flags.join(',')}`);
-    }
-  }
+const regions = (process.argv[2] || 'ae,sa,ng').split(',');
+const goals = (process.argv[3] || 'backup,off,grid').split(',');
+function line(s) {
+  const inv = `${s.inverter.units > 1 ? s.inverter.units + ' x ' : ''}${s.inverter.item.name}`;
+  const b = s.battery ? `${s.battery.units} x ${s.battery.model.name} (${s.battery.totalKWh.toFixed(1)} kWh, ${s.battery.runtimeH.toFixed(1)} h)` : 'no battery';
+  const pv = s.pv ? `${s.pv.count} x ${s.pv.panel.wp} W${s.pv.short ? ' (' + s.pv.short + ' to order)' : ''}, ${Math.round(s.pv.coverage * 100)}%` : 'no panels';
+  return `${(s.label || '').padEnd(8)} ${inv} | ${b} | ${pv} | ${s.ready ? 'READY' : 'order ' + s.toOrder.join('+')} | score ${s.score.toFixed(1)}`;
+}
+for (const r of regions) for (const g of goals) for (const p of data.PRESETS.filter((x) => x.id !== 'p0')) {
+  const d = data.DURATIONS.find((x) => x.id === (g === 'off' ? 'night' : 'short'));
+  const res = engine.recommend(p.qty, { goal: g, region: r, backupHours: d.hours, solar: true, coverage: g === 'grid' ? 0.7 : d.coverage, psh: 5.5, simult: 0.8 }, data, stock);
+  console.log(`\n[${r} ${g}] ${p.label}  run ${Math.round(res.load.runW)} W peak ${Math.round(res.load.peakW)} W day ${(res.load.dailyWh / 1000).toFixed(1)} kWh${res.fromStock ? '' : '  (NOT FROM STOCK)'}${res.expert ? ' EXPERT' : ''}`);
+  if (res.best) console.log('  ' + line(res.best));
+  for (const a of res.alternatives) console.log('  ' + line(a));
+}
+if (goals.includes('pump')) for (const r of regions) for (const pm of data.PUMPS) {
+  const res = engine.recommend({}, { goal: 'pump', region: r, pumpKw: pm.kw, psh: 5.5 }, data, stock);
+  console.log(`[${r} pump ${pm.hp} HP] ` + (res.best ? line(res.best) : 'none'));
 }

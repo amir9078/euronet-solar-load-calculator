@@ -1,159 +1,160 @@
-/* Euronet Solar Load Calculator - interface */
+/* Euronet Solar System Finder - interface */
 (function () {
   'use strict';
 
-  var D = window.EURONET_DATA;
+  var D = Object.assign({}, window.EURONET_DATA, window.EURONET_CATALOG);
   var E = window.EuronetEngine;
   var A = D.ASSUMPTIONS;
-  var STORE = 'euronet-load-calculator-v1';
+  var STORE = 'euronet-finder-v2';
   var MAXQ = 30;
-  var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var STOCK = null;
 
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function byId(list, id) { return E.byId(list, id); }
   function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
-
-  /* ---------- number formats ---------- */
   function nd(x, d) { return Number(x).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: d }); }
   function n0(x) { return nd(Math.round(x), 0); }
-  function pw(w) { return w >= 1000 ? nd(w / 1000, 2) + ' kW' : n0(w) + ' W'; }
-  function kwh(x) { return nd(x, x < 10 ? 2 : 1) + ' kWh'; }
-  function hrs(h) { var r = Math.round(h * 10) / 10; return nd(h, h < 10 ? 1 : 0) + (r === 1 ? ' hour' : ' hours'); }
+  function pw(w) { return w >= 1000 ? nd(w / 1000, 1) + ' kW' : n0(w) + ' W'; }
+  function kwh(x) { return nd(x, x < 10 ? 1 : 0) + ' kWh'; }
+  function hrs(h) { var r = Math.round(h); return (h < 10 ? nd(h, 1) : n0(h)) + (r === 1 ? ' hour' : ' hours'); }
   function pct(x) { return Math.round(x * 100) + '%'; }
 
   /* ---------- state ---------- */
   function defaults() {
-    return {
-      qty: clone(byId(D.PRESETS, 'p2').qty), preset: 'p2', region: 'ae', grid: 'short',
-      hours: 3, solar: true, coverage: 0.4, psh: 5.5, simult: 0.8,
-      filter: 'all', search: '', step: 1
-    };
+    return { goal: 'backup', preset: 'p2', qty: clone(byId(D.PRESETS, 'p2').qty), region: 'ae', duration: 'short', hours: 3,
+      solar: true, coverage: 0.4, psh: 5.5, simult: 0.8, pumpHp: 3, view: 0, filter: 'all', search: '' };
   }
   var state = defaults();
-  var PERSIST = ['qty', 'preset', 'region', 'grid', 'hours', 'solar', 'coverage', 'psh', 'simult'];
+  var KEEP = ['goal', 'preset', 'qty', 'region', 'duration', 'hours', 'solar', 'coverage', 'psh', 'simult', 'pumpHp'];
 
   function sanitize(src) {
     var s = defaults();
     if (!src || typeof src !== 'object') return s;
+    if (byId(D.GOALS, src.goal)) s.goal = src.goal;
     if (src.qty && typeof src.qty === 'object') {
       s.qty = {};
-      D.APPLIANCES.forEach(function (a) {
-        var n = Math.floor(Number(src.qty[a.id]));
-        if (n > 0) s.qty[a.id] = Math.min(n, MAXQ);
-      });
+      D.APPLIANCES.forEach(function (a) { var n = Math.floor(Number(src.qty[a.id])); if (n > 0) s.qty[a.id] = Math.min(n, MAXQ); });
     }
     s.preset = src.preset === 'custom' || byId(D.PRESETS, src.preset) ? src.preset : 'custom';
     if (byId(D.REGIONS, src.region)) s.region = src.region;
-    if (byId(D.GRID_SITUATIONS, src.grid)) s.grid = src.grid;
-    if (isFinite(Number(src.hours))) s.hours = clamp(Math.round(Number(src.hours)), 1, 24);
+    if (byId(D.DURATIONS, src.duration) || src.duration === 'custom') s.duration = src.duration;
+    if (isFinite(+src.hours)) s.hours = clamp(Math.round(+src.hours), 1, 24);
     if (typeof src.solar === 'boolean') s.solar = src.solar;
-    if (isFinite(Number(src.coverage))) s.coverage = clamp(Number(src.coverage), 0.1, 1);
-    if (isFinite(Number(src.psh))) s.psh = clamp(Number(src.psh), 3, 7.5);
-    if ([0.6, 0.8, 1].indexOf(Number(src.simult)) > -1) s.simult = Number(src.simult);
-    if (s.grid === 'off') s.solar = true;
+    if (isFinite(+src.coverage)) s.coverage = clamp(+src.coverage, 0.1, 1);
+    if (isFinite(+src.psh)) s.psh = clamp(+src.psh, 3, 7.5);
+    if ([0.6, 0.8, 1].indexOf(+src.simult) > -1) s.simult = +src.simult;
+    if (D.PUMPS.some(function (p) { return p.hp === +src.pumpHp; })) s.pumpHp = +src.pumpHp;
     return s;
   }
-  function persistable() { var o = {}; PERSIST.forEach(function (k) { o[k] = state[k]; }); return o; }
-  function save() { try { localStorage.setItem(STORE, JSON.stringify(persistable())); } catch (e) { /* storage can be blocked */ } }
-  function restore() {
-    try { var raw = localStorage.getItem(STORE); if (raw) return sanitize(JSON.parse(raw)); } catch (e) { /* ignore */ }
-    return null;
-  }
-  function encodeShare() {
-    try { return btoa(JSON.stringify(persistable())).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { return ''; }
+  function keep() { var o = {}; KEEP.forEach(function (k) { o[k] = state[k]; }); return o; }
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(keep())); } catch (e) { /* blocked storage */ } }
+  function restore() { try { var r = localStorage.getItem(STORE); if (r) return sanitize(JSON.parse(r)); } catch (e) { /* ignore */ } return null; }
+  function shareUrl() {
+    var code = '';
+    try { code = btoa(JSON.stringify(keep())).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { /* ignore */ }
+    return location.origin + location.pathname + '#s=' + code;
   }
   function decodeShare(str) {
-    try {
-      var b = str.replace(/-/g, '+').replace(/_/g, '/');
-      while (b.length % 4) b += '=';
-      return sanitize(JSON.parse(atob(b)));
-    } catch (e) { return null; }
+    try { var b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; return sanitize(JSON.parse(atob(b))); } catch (e) { return null; }
   }
-  function shareUrl() { return location.origin + location.pathname + '#s=' + encodeShare(); }
 
-  /* ---------- derived ---------- */
-  function load() { return E.computeLoad(state.qty, D, state.simult); }
   function region() { return byId(D.REGIONS, state.region); }
-  function solarOn() { return state.grid === 'off' ? true : state.solar; }
-  function engineOpts() {
-    return { backupHours: state.hours, solar: solarOn(), coverage: solarOn() ? state.coverage : 0, psh: state.psh, simult: state.simult };
+  function pump() { return D.PUMPS.filter(function (p) { return p.hp === state.pumpHp; })[0]; }
+  function goal() { return byId(D.GOALS, state.goal); }
+  function result() {
+    return E.recommend(state.qty, {
+      goal: state.goal, region: region().stock, backupHours: state.hours, solar: state.goal === 'off' ? true : state.solar,
+      coverage: state.coverage, psh: state.psh, simult: state.simult, pumpKw: pump().kw
+    }, D, STOCK);
   }
 
-  /* ---------- step 1 ---------- */
-  function matchPreset() {
-    var cur = state.qty;
-    var curKeys = Object.keys(cur).filter(function (k) { return cur[k] > 0; });
-    for (var i = 0; i < D.PRESETS.length; i++) {
-      var p = D.PRESETS[i];
-      var pk = Object.keys(p.qty);
-      if (pk.length !== curKeys.length) continue;
-      if (pk.every(function (k) { return cur[k] === p.qty[k]; })) return p.id;
-    }
-    return 'custom';
-  }
+  /* ---------- questions ---------- */
+  var ICONS = {
+    backup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M10 9l-2 3h4l-2 3"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/><circle cx="18" cy="4" r="0"/></svg>',
+    off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+    pump: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5 6 5 10a5 5 0 0 1-10 0c0-4 5-10 5-10z"/></svg>'
+  };
 
-  function renderPresets() {
-    $('#presets').innerHTML = D.PRESETS.map(function (p) {
+  function renderQuestions() {
+    $('#goals').innerHTML = D.GOALS.map(function (g) {
+      return '<label class="goal"><input type="radio" name="goal" value="' + g.id + '"' + (g.id === state.goal ? ' checked' : '') + '>' +
+        '<span class="goal-body">' + ICONS[g.id] + '<strong>' + esc(g.label) + '</strong><span>' + esc(g.hint) + '</span></span></label>';
+    }).join('');
+    $('#presets').innerHTML = D.PRESETS.filter(function (p) { return p.id !== 'p0'; }).map(function (p) {
       return '<label class="chip"><input type="radio" name="preset" value="' + p.id + '"' + (state.preset === p.id ? ' checked' : '') + '>' +
         '<span class="chip-body"><span class="chip-title">' + esc(p.label) + '</span><span class="chip-hint">' + esc(p.hint) + '</span></span></label>';
     }).join('');
+    $('#pumps').innerHTML = D.PUMPS.map(function (p) {
+      return '<label class="chip"><input type="radio" name="pump" value="' + p.hp + '"' + (state.pumpHp === p.hp ? ' checked' : '') + '>' +
+        '<span class="chip-body"><span class="chip-title">' + p.hp + ' HP</span></span></label>';
+    }).join('');
+    $('#region').innerHTML = D.REGIONS.map(function (r) { return '<option value="' + r.id + '"' + (r.id === state.region ? ' selected' : '') + '>' + esc(r.label) + '</option>'; }).join('');
+    $('#durations').innerHTML = D.DURATIONS.map(function (d) {
+      return '<label class="chip"><input type="radio" name="duration" value="' + d.id + '"' + (state.duration === d.id ? ' checked' : '') + '>' +
+        '<span class="chip-body"><span class="chip-title">' + esc(d.label) + '</span><span class="chip-hint">' + d.hours + ' hours</span></span></label>';
+    }).join('');
+    $('#together').innerHTML = [[0.6, 'A few things at a time', 'About 60%'], [0.8, 'A typical household', 'About 80%'], [1, 'Almost everything together', '100%']].map(function (o) {
+      return '<label class="radio-item"><input type="radio" name="together" value="' + o[0] + '"' + (o[0] === state.simult ? ' checked' : '') + '>' +
+        '<span class="ri-body"><strong>' + o[1] + '</strong><span>' + o[2] + '</span></span></label>';
+    }).join('');
+    renderAppliances();
+    syncControls();
   }
 
+  function syncControls() {
+    var g = state.goal;
+    $('#q-home').hidden = g === 'pump';
+    $('#q-pump').hidden = g !== 'pump';
+    $('#q-duration').hidden = g === 'grid' || g === 'pump';
+    $('#solar-row').hidden = g !== 'backup';
+    $('#solar').checked = state.solar;
+    $('#tune-appliances').hidden = g === 'pump';
+    $('#hours-block').hidden = g === 'grid' || g === 'pump';
+    $('#coverage-block').hidden = g === 'pump' || (g === 'backup' && !state.solar);
+    $('#together-block').hidden = g === 'pump';
+    $('#hours').value = state.hours; $('#hours-out').textContent = state.hours + ' h';
+    $('#coverage').value = Math.round(state.coverage * 100); $('#coverage-out').textContent = Math.round(state.coverage * 100) + '%';
+    $('#psh').value = nd(state.psh, 1);
+    var L = E.computeLoad(state.qty, D, state.simult);
+    $('#home-hint').textContent = L.count ? L.count + ' appliances, ' + pw(L.connectedW) + ' connected, about ' + nd(L.dailyWh / 1000, 1) + ' kWh a day. Change them under Fine-tune.' : 'Pick a home type or add appliances under Fine-tune.';
+  }
+
+  /* ---------- appliance list (fine-tune) ---------- */
+  function matchPreset() {
+    var cur = state.qty, keys = Object.keys(cur).filter(function (k) { return cur[k] > 0; });
+    for (var i = 0; i < D.PRESETS.length; i++) {
+      var pk = Object.keys(D.PRESETS[i].qty);
+      if (pk.length === keys.length && pk.every(function (k) { return cur[k] === D.PRESETS[i].qty[k]; })) return D.PRESETS[i].id;
+    }
+    return 'custom';
+  }
   function matches(a) {
     if (state.filter === 'heavy' && !a.heavy) return false;
     if (state.filter === 'everyday' && a.heavy) return false;
     var q = state.search.trim().toLowerCase();
-    if (!q) return true;
-    return (a.name + ' ' + a.note + ' ' + a.kw).toLowerCase().indexOf(q) > -1;
+    return !q || (a.name + ' ' + a.note + ' ' + a.kw).toLowerCase().indexOf(q) > -1;
   }
-
-  function meta(a) {
-    var m = n0(a.w) + ' W';
-    if (a.note && !/ W$/.test(a.note)) m += ' · ' + a.note;
-    return m;
-  }
-
-  function rowHtml(a) {
-    var n = state.qty[a.id] || 0;
-    return '<li class="row' + (n ? ' on' : '') + '" data-row="' + a.id + '">' +
-      '<div><span class="nm">' + esc(a.name) + '</span><span class="meta">' + esc(meta(a)) + '</span></div>' +
-      '<div class="qty">' +
-      '<button type="button" data-act="dec" data-id="' + a.id + '" aria-label="Fewer ' + esc(a.name) + '"' + (n ? '' : ' disabled') + '>&minus;</button>' +
-      '<span class="n" data-n="' + a.id + '">' + n + '</span>' +
-      '<button type="button" data-act="inc" data-id="' + a.id + '" aria-label="More ' + esc(a.name) + '"' + (n >= MAXQ ? ' disabled' : '') + '>+</button>' +
-      '</div></li>';
-  }
-
-  function groupCount(catId) {
-    return D.APPLIANCES.reduce(function (t, a) { return t + (a.cat === catId ? (state.qty[a.id] || 0) : 0); }, 0);
-  }
-
   function renderAppliances() {
-    var html = '';
-    var any = false;
+    var html = '', any = false;
     D.CATEGORIES.forEach(function (c) {
       var items = D.APPLIANCES.filter(function (a) { return a.cat === c.id && matches(a); });
       if (!items.length) return;
       any = true;
-      var cnt = groupCount(c.id);
-      html += '<section class="group" data-group="' + c.id + '"><h3>' + esc(c.label) +
-        '<span class="count" data-count="' + c.id + '"' + (cnt ? '' : ' hidden') + '>' + cnt + '</span></h3>' +
-        '<ul class="rows">' + items.map(rowHtml).join('') + '</ul></section>';
+      html += '<section class="group"><h3>' + esc(c.label) + '</h3><ul class="rows">' + items.map(function (a) {
+        var n = state.qty[a.id] || 0;
+        return '<li class="row' + (n ? ' on' : '') + '" data-row="' + a.id + '"><div><span class="nm">' + esc(a.name) + '</span><span class="meta">' + n0(a.w) + ' W</span></div>' +
+          '<div class="qty"><button type="button" data-act="dec" data-id="' + a.id + '" aria-label="Fewer ' + esc(a.name) + '"' + (n ? '' : ' disabled') + '>&minus;</button>' +
+          '<span class="n" data-n="' + a.id + '">' + n + '</span><button type="button" data-act="inc" data-id="' + a.id + '" aria-label="More ' + esc(a.name) + '"' + (n >= MAXQ ? ' disabled' : '') + '>+</button></div></li>';
+      }).join('') + '</ul></section>';
     });
     $('#appliances').innerHTML = html;
     $('#no-match').hidden = any;
   }
-
   function setQty(id, n) {
-    var a = byId(D.APPLIANCES, id);
-    if (!a) return;
     n = clamp(n, 0, MAXQ);
     if (n) state.qty[id] = n; else delete state.qty[id];
     var row = $('[data-row="' + id + '"]');
@@ -163,420 +164,259 @@
       $('[data-act="dec"]', row).disabled = n === 0;
       $('[data-act="inc"]', row).disabled = n >= MAXQ;
     }
-    var cnt = $('[data-count="' + a.cat + '"]');
-    if (cnt) { var c = groupCount(a.cat); cnt.textContent = c; cnt.hidden = !c; }
     var m = matchPreset();
-    if (m !== state.preset) { state.preset = m; renderPresets(); }
-    onLoadChanged();
+    if (m !== state.preset) { state.preset = m; $$('input[name="preset"]').forEach(function (r) { r.checked = r.value === m; }); }
+    changed();
   }
 
-  function onLoadChanged() {
-    var L = load();
-    $('#s-conn').textContent = n0(L.connectedW) + ' W';
-    $('#s-run').textContent = n0(L.runW) + ' W';
-    $('#s-day').textContent = nd(L.dailyWh / 1000, 1) + ' kWh';
-    var none = L.count === 0;
-    $('#to2').disabled = none;
-    $('#need-one').hidden = !none;
-    if (!$('#step2').hidden) updateHoursHint();
-    save();
+  /* ---------- answer ---------- */
+  function stockChip(item, need, short) {
+    if (!short) return '<span class="chip-stock">In stock</span>';
+    if (short < need) return '<span class="chip-stock part">' + (need - short) + ' in stock, ' + short + ' to order</span>';
+    return '<span class="chip-stock order">To order</span>';
   }
 
-  /* ---------- step 2 ---------- */
-  var TOGETHER = [
-    { v: 0.6, t: 'A few things at a time', d: 'About 60% of the load' },
-    { v: 0.8, t: 'A typical household', d: 'About 80% of the load' },
-    { v: 1, t: 'Almost everything together', d: '100% of the load' }
-  ];
-
-  function renderStep2() {
-    $('#region').innerHTML = D.REGIONS.map(function (r) {
-      return '<option value="' + r.id + '"' + (r.id === state.region ? ' selected' : '') + '>' + esc(r.label) + '</option>';
-    }).join('');
-    $('#together').innerHTML = TOGETHER.map(function (o) {
-      return '<label class="radio-item"><input type="radio" name="together" value="' + o.v + '"' + (o.v === state.simult ? ' checked' : '') + '>' +
-        '<span class="ri-body"><strong>' + esc(o.t) + '</strong><span>' + esc(o.d) + '</span></span></label>';
-    }).join('');
-    $('#grid').innerHTML = D.GRID_SITUATIONS.map(function (g) {
-      return '<label class="card-radio"><input type="radio" name="grid" value="' + g.id + '"' + (g.id === state.grid ? ' checked' : '') + '>' +
-        '<span class="cr-body"><strong>' + esc(g.label) + '</strong><span>' + esc(g.hint) + '</span></span></label>';
-    }).join('');
-    syncStep2Controls();
+  function partRow(role, item, qtyLine, need, short) {
+    return '<li class="prod"><div class="ph"><img src="' + esc(item.img) + '" alt="" loading="lazy" width="76" height="76"></div><div>' +
+      '<span class="role">' + esc(role) + '</span><a class="pn" href="' + esc(item.url) + '" target="_blank" rel="noopener">' + esc(item.name) + '</a>' +
+      '<p class="pq">' + qtyLine + '</p>' + stockChip(item, need, short) + '</div></li>';
   }
 
-  function syncStep2Controls() {
-    var r = region();
-    $('#region-hint').textContent = 'Planning value of ' + nd(r.psh, 1) + ' peak sun hours a day. Questions go to our ' + r.office + ' office on ' + r.phone + '.';
-    $('#hours').value = state.hours;
-    $('#hours-out').textContent = state.hours + ' h';
-    updateHoursHint();
-    var off = state.grid === 'off';
-    var sw = $('#solar');
-    sw.checked = solarOn();
-    sw.disabled = off;
-    $('#solar-hint').textContent = off
-      ? 'Panels are needed when there is no grid to recharge the battery.'
-      : (sw.checked ? 'The panels recharge the battery and carry daytime loads.' : 'No panels. The grid recharges the battery.');
-    $('#coverage-wrap').hidden = !solarOn();
-    $('#coverage').value = Math.round(state.coverage * 100);
-    $('#coverage-out').textContent = Math.round(state.coverage * 100) + '%';
-    $('#psh').value = nd(state.psh, 1);
-  }
+  function short(name) { return name.replace(/ Hybrid Inverter| Off Grid Inverter| Inverter/i, '').replace(/^Hybrid /, '').replace(/ Series/, ''); }
 
-  function updateHoursHint() {
-    var L = load();
-    var el = $('#hours-hint');
-    if (!L.count) { el.textContent = 'Add appliances in the first step to see the energy this needs.'; return; }
-    el.textContent = 'Your typical draw is ' + pw(L.avgW) + ', so ' + hrs(state.hours) + ' needs about ' + kwh(L.avgW * state.hours / 1000) + ' from the battery.';
-  }
-
-  /* ---------- navigation ---------- */
-  function go(step, silent) {
-    if (step === 2 && load().count === 0) step = 1;
-    state.step = step;
-    [1, 2, 3].forEach(function (i) { $('#step' + i).hidden = i !== step; });
-    $$('.step-btn').forEach(function (b) {
-      if (Number(b.dataset.go) === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
-    });
-    document.body.classList.toggle('on-results', step === 3);
-    document.body.setAttribute('data-step', String(step));
-    if (step === 2) renderStep2();
-    if (step === 3) renderResults();
-    if (!silent) {
-      $('#step' + step).focus({ preventScroll: true });
-      $('#stepper').scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block: 'start' });
+  function diagram(sys, res) {
+    var inv = sys.inverter.item, L = res.load;
+    var family = { 'Pump Inverter': 'Pump drive', 'PV Inverter': 'Grid inverter' }[inv.series] || inv.series.replace(' Series', '');
+    var invLabel = (sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '') + family + ' ' + pw(inv.ratedW);
+    var end = sys.goal === 'pump' ? ['Pump', state.pumpHp + ' HP motor'] : ['Your home', pw(L.runW) + ' running'];
+    function node(x, y, w, t1, t2) {
+      return '<g class="node"><rect x="' + (x - w / 2) + '" y="' + (y - 34) + '" width="' + w + '" height="68" rx="12"/>' +
+        '<text class="t1" x="' + x + '" y="' + (y - 4) + '" text-anchor="middle">' + esc(t1) + '</text><text class="t2" x="' + x + '" y="' + (y + 20) + '" text-anchor="middle">' + esc(t2) + '</text></g>';
     }
-  }
-
-  /* ---------- results ---------- */
-  var TIER_NOTES = {
-    tight: 'This is the largest unit in this range for your load and it runs close to its limit. Our engineers can suggest units in parallel or moving a heavy load off the battery.',
-    'bank-short': 'This is the largest bank we size online and it does not reach the backup time you asked for. Try fewer hours, take out a heavy load, or ask our engineers for a bigger system.',
-    'pv-capped': 'The inverter takes at most about {max} of panels, so solar covers {cov} of your daily use instead of {want}. Ask us about a second inverter or more solar inputs.'
-  };
-
-  function productRow(role, img, name, url, lines) {
-    return '<li class="prod"><div class="ph"><img src="' + esc(img) + '" alt="" loading="lazy" width="76" height="76"></div>' +
-      '<div><span class="role">' + esc(role) + '</span>' +
-      '<a class="pn" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(name) + '</a>' +
-      '<p class="pq">' + lines + '</p></div></li>';
-  }
-
-  function meter(label, value, frac, cls, caption) {
-    return '<div class="meter"><div class="mh"><span>' + esc(label) + '</span><span>' + esc(value) + '</span></div>' +
-      '<div class="track"><i class="' + cls + '" style="width:' + Math.round(clamp(frac, 0, 1) * 100) + '%"></i></div>' +
-      '<p class="mc">' + caption + '</p></div>';
-  }
-
-  function bankLine(b) {
-    var m = b.model;
-    if (m.chem === 'gel') {
-      var wiring = b.series > 1
-        ? b.units + ' batteries in ' + b.parallel + (b.parallel > 1 ? ' strings' : ' string') + ' of ' + b.series + ' for ' + b.busV + ' V'
-        : b.units + (b.units > 1 ? ' batteries in parallel' : ' battery') + ' on ' + b.busV + ' V';
-      return '<b>' + b.units + ' &times;</b> ' + nd(m.v, 0) + ' V ' + m.ah + ' Ah gel. ' + wiring + '. ' + kwh(b.totalKWh) + ' in total, ' + kwh(b.usableKWh) + ' usable.';
+    var hasBat = !!sys.battery, hasGrid = sys.goal === 'backup' || sys.goal === 'grid';
+    var left = sys.pv ? [sys.pv.count + ' x ' + sys.pv.panel.wp + ' W', nd(sys.pv.kWp, 2) + ' kWp of panels'] : ['Grid charging', 'no panels'];
+    var mid = [invLabel, inv.busV ? inv.busV + ' V battery bus' : (inv.phase === 3 ? 'three-phase' : 'single-phase')];
+    var bat = hasBat ? [sys.battery.units + ' x ' + nd(sys.battery.model.v, 1) + ' V ' + sys.battery.model.ah + ' Ah', kwh(sys.battery.totalKWh) + ' battery'] : null;
+    var grid = hasGrid ? ['Grid', sys.goal === 'grid' ? 'tops up and takes extra' : 'charges when it is on'] : null;
+    if ($('#answer').clientWidth < 520) {
+      // phone: chain runs top to bottom, battery and grid sit beside it
+      var v = '<svg viewBox="0 0 360 320" role="img" aria-label="How the parts connect">';
+      if (sys.pv) v += '<path class="flow sun" d="M95 76 L95 120"/>';
+      v += '<path class="flow" d="M95 188 L95 232"/>';
+      if (hasBat) v += '<path class="flow" d="M182 154 L190 154"/>';
+      if (hasGrid) v += '<path class="flow grid" d="M190 266 L182 266"/>';
+      v += node(95, 42, 172, left[0], left[1]) + node(95, 154, 172, mid[0], mid[1]) + node(95, 266, 172, end[0], end[1]);
+      if (bat) v += node(273, 154, 162, bat[0], bat[1]);
+      if (grid) v += node(273, 266, 162, grid[0], grid[1]);
+      return '<div class="diagram diagram-v">' + v + '</svg></div>';
     }
-    return '<b>' + b.units + ' &times;</b> ' + nd(m.v, 1) + ' V ' + m.ah + ' Ah lithium. ' + kwh(b.totalKWh) + ' in total, ' + kwh(b.usableKWh) + ' usable.';
+    var s = '<svg viewBox="0 0 640 ' + (hasBat || hasGrid ? 250 : 108) + '" role="img" aria-label="How the parts connect">';
+    if (sys.pv) s += '<path class="flow sun" d="M178 52 L218 52"/>';
+    s += '<path class="flow" d="M422 52 L462 52"/>';
+    if (hasBat) s += '<path class="flow" d="M320 86 L320 160"/>';
+    if (hasGrid) s += '<path class="flow grid" d="M552 160 L552 86"/>';
+    if (sys.pv) s += node(92, 52, 172, sys.pv.count + ' x ' + sys.pv.panel.wp + ' W', nd(sys.pv.kWp, 2) + ' kWp of panels');
+    else s += node(92, 52, 172, 'Grid charging', 'no panels');
+    s += node(320, 52, 196, invLabel, inv.busV ? inv.busV + ' V battery bus' : (inv.phase === 3 ? 'three-phase' : 'single-phase'));
+    s += node(552, 52, 172, end[0], end[1]);
+    if (hasBat) s += node(320, 194, 196, sys.battery.units + ' x ' + nd(sys.battery.model.v, 1) + ' V ' + sys.battery.model.ah + ' Ah', kwh(sys.battery.totalKWh) + ' battery');
+    if (hasGrid) s += node(552, 194, 172, 'Grid', sys.goal === 'grid' ? 'tops up and takes extra' : 'charges when it is on');
+    return '<div class="diagram">' + s + '</svg></div>';
   }
 
-  function msgFor(t, res) {
-    var L = res.load, inv = t.inverter, b = t.battery, r = region();
-    var lines = [
-      'Hello EURONET, I used the solar load calculator and would like a quote.',
-      '',
-      'System ' + t.tier.label,
-      'Inverter ' + inv.name,
-      'Battery ' + b.units + ' x ' + b.model.name + ' (' + kwh(b.totalKWh) + ')'
-    ];
-    if (t.pv) lines.push('Panels ' + t.pv.count + ' x ' + t.pv.panel.wp + ' W (' + nd(t.pv.kWp, 2) + ' kWp)');
-    lines.push('', 'My load is ' + n0(L.connectedW) + ' W connected, ' + n0(L.runW) + ' W running together, about ' + nd(L.dailyWh / 1000, 1) + ' kWh a day.');
-    lines.push('Backup wanted ' + hrs(state.hours) + '. Country ' + r.label + '.');
-    lines.push('', 'My results ' + shareUrl());
+  function headline(sys, res) {
+    var L = res.load;
+    if (sys.goal === 'pump') return 'Runs a ' + state.pumpHp + ' HP pump straight from the sun through the day. No battery needed.';
+    if (sys.goal === 'grid') return 'Makes about ' + kwh(sys.pv.yieldKWh) + ' a day, around ' + pct(sys.pv.coverage) + ' of the electricity you use.';
+    var t = 'Keeps your ' + pw(L.runW) + ' load going for about ' + hrs(sys.battery.runtimeH) + ' on battery';
+    if (sys.pv) t += ', and the panels make about ' + kwh(sys.pv.yieldKWh) + ' a day';
+    return t + '.';
+  }
+
+  var ALT_NAMES = { lead: 'Lead-acid battery version', outdoor: 'Outdoor IP65 version', lithium: 'Lithium battery version', other: 'Another inverter size' };
+
+  function partsHtml(sys) {
+    var inv = sys.inverter.item, html = '';
+    var invLine = '<b>' + (sys.inverter.units > 1 ? sys.inverter.units + ' units in parallel' : '1 unit') + '</b> &middot; ' + pw(inv.ratedW) + (inv.busV ? ' &middot; ' + inv.busV + ' V battery' : '') + (inv.phase === 3 ? ' &middot; three-phase supply' : '') + ' &middot; ' + esc(inv.ip);
+    html += partRow(inv.kind === 'pump' ? 'Pump drive' : inv.kind === 'ongrid' ? 'Grid-tied inverter' : inv.kind === 'lf' ? 'Backup inverter' : 'Inverter', inv, invLine, sys.inverter.units, sys.inverter.short);
+    if (sys.battery) {
+      var b = sys.battery, m = b.model;
+      var wiring = m.chem === 'lfp' ? (b.units > 1 ? b.units + ' in parallel' : 'single unit') : b.parallel + (b.parallel > 1 ? ' strings' : ' string') + ' of ' + b.series + ' for ' + b.busV + ' V';
+      html += partRow('Battery', m, '<b>' + b.units + ' &times;</b> ' + wiring + ' &middot; ' + kwh(b.totalKWh) + ' total, ' + kwh(b.usableKWh) + ' usable', b.units, b.short);
+    }
+    if (sys.pv) html += partRow('Solar panels', sys.pv.panel, '<b>' + sys.pv.count + ' &times; ' + sys.pv.panel.wp + ' W</b> &middot; ' + nd(sys.pv.kWp, 2) + ' kWp &middot; about ' + n0(sys.pv.areaM2) + ' m&sup2; of roof', sys.pv.count, sys.pv.short);
+    return '<ul class="parts">' + html + '</ul>';
+  }
+
+  function statsHtml(sys, res) {
+    var t = [];
+    if (sys.battery) t.push(['Backup', hrs(sys.battery.runtimeH)]);
+    if (sys.pv) t.push(['Solar a day', kwh(sys.pv.yieldKWh)]);
+    if (sys.goal !== 'pump' && sys.goal !== 'grid') t.push(['Inverter load', pct(sys.loadPct)]);
+    if (sys.goal === 'grid') { t.push(['Share of use', pct(sys.pv.coverage)]); t.push(['A month', kwh(sys.pv.monthlyKWh)]); }
+    if (sys.goal === 'pump') { t.push(['Drive size', pw(sys.inverter.item.ratedW)]); t.push(['Roof or ground', n0(sys.pv.areaM2) + ' m²']); }
+    return '<div class="stats">' + t.slice(0, 3).map(function (x) { return '<div class="stat-tile"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>'; }).join('') + '</div>';
+  }
+
+  function kitHtml(sys) {
+    if (!sys.kit.length) return '';
+    return '<details class="kit"><summary>Fitting kit, ' + sys.kit.length + ' items' + (sys.kitShort.length ? ', ' + sys.kitShort.length + ' to order' : ', all in stock') + '</summary><ul class="kit-list">' +
+      sys.kit.map(function (k) {
+        return '<li><span class="kq">' + k.qty + ' &times;</span><span>' + esc(k.item.name) + '<span class="why">' + esc(k.why) + '</span></span>' + stockChip(k.item, k.qty, k.short) + '</li>';
+      }).join('') + '</ul><p class="hint" style="padding:0 14px 12px">Typical quantities. Your installer confirms cable runs and string layout on site.</p></details>';
+  }
+
+  function notesHtml(sys, res) {
+    var n = [];
+    if (!res.fromStock) n.push('Nothing in stock in ' + region().label + ' fits this exactly, so this system uses items we would order for you.');
+    if (sys.tight) n.push('The inverter runs close to its limit. Moving a heavy appliance off the battery gives it more room.');
+    if (sys.pv && sys.pv.capped) n.push('The inverter takes about ' + pw(sys.inverter.item.pvMaxW * sys.inverter.units) + ' of panels at most, so solar covers ' + pct(sys.pv.coverage) + ' instead of ' + pct(state.coverage) + '.');
+    if (sys.pv && sys.pv.short) n.push('We have ' + (sys.pv.count - sys.pv.short) + ' of these panels in stock now. The other ' + sys.pv.short + ' come with the next shipment, or our team can suggest a mix.');
+    if (sys.goal === 'grid') n.push('Grid-tied inverters switch off in a power cut for safety. Choose Power backup if you need power during cuts.');
+    if (sys.inverter.item.phase === 3) n.push('This inverter needs a three-phase supply.');
+    if (sys.goal === 'pump') n.push('Match the drive to the pump motor phase. Panels are sized at ' + nd(A.pumpArrayRatio, 1) + ' times the motor power so the pump keeps running in weaker sun.');
+    if (sys.inverter.item.pvPublished === false && sys.pv && sys.pv.count * sys.pv.panel.wp >= 0.75 * sys.inverter.item.pvMaxW * sys.inverter.units) n.push('The solar input limit for this inverter is our estimate from its charge current. Our engineers confirm it from the datasheet.');
+    return n.length ? '<ul class="notes">' + n.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '';
+  }
+
+  function message(sys, res) {
+    var r = region(), L = res.load, lines = ['Hello EURONET, I used the solar system finder and would like a quote.', ''];
+    lines.push('Goal ' + goal().label + (sys.goal === 'pump' ? ', ' + state.pumpHp + ' HP pump' : ''));
+    lines.push((sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '1 x ') + sys.inverter.item.name);
+    if (sys.battery) lines.push(sys.battery.units + ' x ' + sys.battery.model.name + ' (' + kwh(sys.battery.totalKWh) + ')');
+    if (sys.pv) lines.push(sys.pv.count + ' x ' + sys.pv.panel.name + ' (' + nd(sys.pv.kWp, 2) + ' kWp)');
+    sys.kit.forEach(function (k) { lines.push(k.qty + ' x ' + k.item.name); });
+    if (sys.goal !== 'pump') lines.push('', 'Load ' + n0(L.connectedW) + ' W connected, about ' + nd(L.dailyWh / 1000, 1) + ' kWh a day' + (sys.battery ? ', backup ' + hrs(state.hours) : '') + '.');
+    lines.push('Country ' + r.label + '.', '', 'My results ' + shareUrl());
     return lines.join('\n');
   }
 
-  function tierCard(t, res) {
-    var L = res.load;
-    if (t.unavailable) {
-      return '<article class="tier off"><h3>' + esc(t.tier.label) + '</h3><p class="tag">' + esc(t.tier.tag) + '</p>' +
-        '<div class="unavail"><strong>Too big for this level.</strong><br>Your load of ' + pw(L.runW) + ' running and ' + pw(L.peakW) + ' at the biggest start is above what these units are built for. ' +
-        'The other levels or our engineers can size it.</div>' + engineerBtn(null) + '</article>';
+  function howHtml(sys, res) {
+    var L = res.load, s = [];
+    if (sys.goal !== 'pump') s.push('Your appliances add up to ' + pw(L.connectedW) + '. With ' + pct(L.simult) + ' running together that is ' + pw(L.runW) + ', and the biggest motor start takes it to ' + pw(L.peakW) + ' for a moment. In a day they use about ' + kwh(L.dailyWh / 1000) + '.');
+    if (sys.battery) {
+      s.push('The inverter must carry the running load with room to spare and survive the start. Where a surge rating is published we use it, otherwise the start has to fit inside the rating.');
+      s.push('The battery holds ' + pw(L.avgW) + ' for ' + hrs(state.hours) + ', after ' + pct(A.invEff) + ' inverter efficiency and ' + pct(sys.battery.model.dod) + ' usable depth, plus 15% reserve. It sits on the inverter\'s own ' + sys.battery.busV + ' V and can deliver the running power.');
     }
-    var inv = t.inverter, b = t.battery, pv = t.pv;
-    var pick = t.tier.key === 'best';
-    var hasSurge = !!inv.surgeW;
+    if (sys.pv && sys.goal !== 'pump') s.push('Each kWp of panels makes about ' + nd(state.psh * A.perfRatio, 2) + ' kWh a day here, from ' + nd(state.psh, 1) + ' peak sun hours and a ' + pct(A.perfRatio) + ' performance ratio.');
+    s.push('We build every combination the stock in ' + region().label + ' allows, keep the ones that do the job, and rank them on fit, lithium life, how much stock backs each part and how few parts it needs. Stock checked ' + stockDate() + '.');
+    return '<details class="how"><summary>How we picked this</summary><div class="how-body"><ol>' + s.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol></div></details>';
+  }
 
-    var prods = '';
-    prods += productRow('Inverter', inv.img, inv.name, inv.url,
-      '<b>' + pw(inv.ratedW) + '</b> &middot; ' + inv.busV + ' V battery &middot; ' + esc(inv.ip) + ' &middot; solar input ' + esc(inv.mppt));
-    prods += productRow('Battery bank', b.model.img, b.model.name, b.model.url, bankLine(b));
-    if (pv) {
-      prods += productRow('Solar panels', pv.panel.img, pv.panel.name, pv.panel.url,
-        '<b>' + pv.count + ' &times; ' + pv.panel.wp + ' W</b> &middot; ' + nd(pv.kWp, 2) + ' kWp &middot; about ' + n0(pv.areaM2) + ' m&sup2; of roof');
-    }
+  function stockDate() {
+    var d = STOCK && STOCK.generatedAt ? new Date(STOCK.generatedAt) : null;
+    return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'recently';
+  }
 
-    var loadCls = t.loadPct <= 0.75 ? '' : (t.loadPct <= 0.9 ? 'warn' : 'hot');
-    var meters = meter('Inverter load', pct(t.loadPct), t.loadPct, loadCls,
-      'Your ' + pw(L.runW) + ' running load on a ' + pw(inv.ratedW) + ' inverter. The biggest motor start takes it to ' + pct(t.peakPct) + ' of ' +
-      (hasSurge ? 'its surge rating' : 'its rating') + ' for a moment.');
-    var ratio = b.runtimeH / state.hours;
-    meters += meter('Backup time', hrs(b.runtimeH), ratio, ratio >= 1 ? '' : (ratio >= 0.8 ? 'warn' : 'hot'),
-      'You asked for ' + hrs(state.hours) + '. This bank gives ' + hrs(b.runtimeH) + ' at your typical load.');
-    if (pv) {
-      meters += meter('Solar share of daily use', pct(pv.coverage), pv.coverage, pv.coverage >= 0.35 ? '' : 'warn',
-        'About ' + nd(pv.yieldKWh, 1) + ' kWh a day, ' + n0(pv.monthlyKWh) + ' kWh a month, against the ' + nd(L.dailyWh / 1000, 1) + ' kWh you use.');
-    } else {
-      meters += '<p class="mc">No panels selected. The grid recharges the battery.</p>';
-    }
-
-    var notes = '';
-    t.flags.forEach(function (f) {
-      var txt = TIER_NOTES[f];
-      if (!txt) return;
-      if (f === 'pv-capped') {
-        txt = txt.replace('{max}', pw(inv.pvMaxW)).replace('{cov}', pct(pv.coverage)).replace('{want}', pct(state.coverage));
-      }
-      notes += '<li>' + esc(txt) + '</li>';
-    });
-    if (pv && !inv.pvPublished && pv.count * pv.panel.wp >= 0.75 * inv.pvMaxW) {
-      notes += '<li>This array is close to the solar input this inverter can take. We estimate that limit from its charge current, and our engineers confirm it from the datasheet.</li>';
-    }
-
+  var current = null;
+  function renderAnswer() {
+    var host = $('#answer-body');
+    if (!STOCK) return;
+    var res = result();
+    current = res;
     var r = region();
-    var msg = msgFor(t, res);
-    var wa = 'https://wa.me/' + r.wa + '?text=' + encodeURIComponent(msg);
-    var mail = 'mailto:contact@euronet.co?subject=' + encodeURIComponent('Solar quote request, ' + t.tier.label + ' system') + '&body=' + encodeURIComponent(msg);
-
-    return '<article class="tier' + (pick ? ' pick' : '') + '">' + (pick ? '<span class="badge">Our pick</span>' : '') +
-      '<h3>' + esc(t.tier.label) + '</h3><p class="tag">' + esc(t.tier.tag) + '</p><p class="blurb">' + esc(t.tier.blurb) + '</p>' +
-      '<ul class="prods">' + prods + '</ul>' +
-      '<div class="meters">' + meters + '</div>' +
-      (notes ? '<ul class="notes">' + notes + '</ul>' : '') +
-      '<div class="cta"><a class="btn btn-wa" href="' + esc(wa) + '" target="_blank" rel="noopener">Get this quote on WhatsApp</a>' +
-      '<a class="btn btn-ghost" href="' + esc(mail) + '">Email this system</a></div></article>';
-  }
-
-  function engineerBtn(res) {
-    var r = region();
-    var wa = 'https://wa.me/' + r.wa + '?text=' + encodeURIComponent('Hello EURONET, I need help sizing a solar system. My results ' + shareUrl());
-    return '<div class="cta"><a class="btn btn-wa" href="' + esc(wa) + '" target="_blank" rel="noopener">Talk to an engineer on WhatsApp</a></div>';
-  }
-
-  function loadCardHtml(res) {
-    var L = res.load;
-    var total = L.items.reduce(function (t, i) { return t + i.dailyWh; }, 0);
-    var top = L.items.slice().sort(function (a, b) { return b.dailyWh - a.dailyWh; }).slice(0, 4);
-    var topHtml = top.map(function (i) {
-      var share = total ? i.dailyWh / total : 0;
-      return '<div class="tu"><span>' + i.qty + ' &times; ' + esc(i.name) + '</span><span class="bar"><i style="width:' + Math.round(share * 100) + '%"></i></span><span class="pc">' + pct(share) + '</span></div>';
-    }).join('');
-    var tip = L.heavyW > 0.4 * L.connectedW
-      ? '<p class="tip">Heavy appliances such as air conditioners, kettles and water heaters are ' + pct(L.heavyW / L.connectedW) + ' of your connected load. Running them in daytime lets solar carry them and keeps the battery for the evening.</p>'
-      : '';
-    return '<div class="load-card"><div class="load-grid">' +
-      '<div class="kpi"><span class="k">Connected load</span><span class="v">' + pw(L.connectedW) + '</span><span class="d">' + L.count + ' appliances</span></div>' +
-      '<div class="kpi"><span class="k">Running together</span><span class="v">' + pw(L.runW) + '</span><span class="d">' + pct(L.simult) + ' of the connected load</span></div>' +
-      '<div class="kpi"><span class="k">Biggest start</span><span class="v">' + pw(L.peakW) + '</span><span class="d">' + (L.surgeFrom ? 'when the ' + esc(L.surgeFrom.name) + ' starts' : 'no motor loads') + '</span></div>' +
-      '<div class="kpi"><span class="k">Daily energy</span><span class="v">' + nd(L.dailyWh / 1000, 1) + ' kWh</span><span class="d">about ' + n0(L.dailyWh / 1000 * 30) + ' kWh a month</span></div>' +
-      '</div><div class="top-users"><h3>Where your energy goes</h3>' + topHtml + '</div>' + tip + '</div>';
-  }
-
-  function compareHtml(res) {
-    var T = res.tiers;
-    function cell(t, fn) { return t.unavailable ? '<td class="' + (t.tier.key === 'best' ? 'pickcol' : '') + '">Not available</td>' : '<td class="' + (t.tier.key === 'best' ? 'pickcol' : '') + '">' + fn(t) + '</td>'; }
-    var rows = [
-      ['Inverter', function (t) { return esc(t.inverter.name); }],
-      ['Rating and battery voltage', function (t) { return pw(t.inverter.ratedW) + ' on ' + t.inverter.busV + ' V'; }],
-      ['Protection rating', function (t) { return esc(t.inverter.ip); }],
-      ['Battery bank', function (t) { return t.battery.units + ' &times; ' + esc(t.battery.model.name); }],
-      ['Usable battery energy', function (t) { return kwh(t.battery.usableKWh); }],
-      ['Backup at your typical load', function (t) { return hrs(t.battery.runtimeH); }]
-    ];
-    if (res.opts.solar) {
-      rows.push(['Solar panels', function (t) { return t.pv.count + ' &times; ' + t.pv.panel.wp + ' W (' + nd(t.pv.kWp, 2) + ' kWp)'; }]);
-      rows.push(['Solar energy a day', function (t) { return kwh(t.pv.yieldKWh); }]);
-      rows.push(['Share of your daily use', function (t) { return pct(t.pv.coverage); }]);
-      rows.push(['Roof area', function (t) { return 'about ' + n0(t.pv.areaM2) + ' m&sup2;'; }]);
-    }
-    var head = '<tr><th scope="col"><span class="sr">Item</span></th>' + T.map(function (t) {
-      return '<th scope="col" class="' + (t.tier.key === 'best' ? 'pickcol' : '') + '">' + esc(t.tier.label) + '</th>';
-    }).join('') + '</tr>';
-    var body = rows.map(function (r) {
-      return '<tr><th scope="row">' + esc(r[0]) + '</th>' + T.map(function (t) { return cell(t, r[1]); }).join('') + '</tr>';
-    }).join('');
-    return '<section class="compare"><h3>Side by side</h3><div class="tscroll"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div></section>';
-  }
-
-  function howHtml(res) {
-    var L = res.load, o = res.opts;
-    var ref = res.tiers.filter(function (t) { return !t.unavailable; });
-    var best = ref.filter(function (t) { return t.tier.key === 'best'; })[0] || ref[0];
-    var lf = D.TIERS.map(function (t) { return t.label + ' ' + pct(t.loadFactor); }).join(', ');
-    var rs = D.TIERS.map(function (t) { return t.label + ' ' + (t.reserve === 1 ? 'none' : '+' + Math.round((t.reserve - 1) * 100) + '%'); }).join(', ');
-    var steps = '';
-    steps += '<li><b>Your load.</b> The ' + L.count + ' appliances add up to ' + pw(L.connectedW) + ' connected. With ' + pct(L.simult) + ' running together that is ' + pw(L.runW) + '.</li>';
-    steps += '<li><b>Motor start.</b> Compressors and pumps pull more for a moment when they start. The largest one here' + (L.surgeFrom ? ' is the ' + esc(L.surgeFrom.name) : '') + ' and adds ' + pw(L.surgeExtraW) + ', so the peak is ' + pw(L.peakW) + '. Only one is assumed to start at a time.</li>';
-    steps += '<li><b>Daily energy.</b> Each appliance counts its power, the share of time it really draws that power, and its usual hours a day. Together that is ' + nd(L.dailyWh / 1000, 1) + ' kWh a day.</li>';
-    steps += '<li><b>Inverter.</b> We take the smallest unit whose rating carries the running load with room to spare (' + esc(lf) + ' of its rating) and whose surge rating covers the peak. Where a surge rating is not published we require the peak to fit inside the continuous rating.</li>';
-    if (best) {
-      var b = best.battery;
-      steps += '<li><b>Battery.</b> Your typical draw of ' + pw(L.avgW) + ' for ' + hrs(o.backupHours) + ' is ' + kwh(L.avgW * o.backupHours / 1000) + '. For ' + esc(best.tier.label) + ' we divide by ' + pct(A.invEff) + ' inverter efficiency and by ' + pct(best.tier.battery.dod) + ' usable depth' +
-        (best.tier.reserve > 1 ? ', then add ' + Math.round((best.tier.reserve - 1) * 100) + '% reserve' : '') + ', which gives ' + kwh(b.needKWh) + ' to install. The bank is the smallest one that reaches it and can also deliver the running power.</li>';
-    }
-    if (o.solar) {
-      steps += '<li><b>Solar.</b> You want solar to cover ' + pct(o.coverage) + ' of ' + nd(L.dailyWh / 1000, 1) + ' kWh. With ' + nd(o.psh, 1) + ' peak sun hours and a ' + pct(A.perfRatio) + ' performance ratio, each kWp makes about ' + nd(o.psh * A.perfRatio, 2) + ' kWh a day. We add a small margin for the upper levels and round up to whole panels, within what the inverter can take.</li>';
-    }
-    return '<details class="how"><summary>How we worked this out</summary><div class="how-body"><ol>' + steps + '</ol>' +
-      '<h4>Assumptions</h4><ul>' +
-      '<li>Inverter efficiency from battery to AC is ' + pct(A.invEff) + '.</li>' +
-      '<li>Gel batteries are used to 50% depth and lithium to 90% to keep them healthy. Gel therefore needs more nominal energy for the same usable energy.</li>' +
-      '<li>Battery reserve by level, ' + esc(rs) + '.</li>' +
-      '<li>Panel yield uses a ' + pct(A.perfRatio) + ' performance ratio for heat, dust, wiring and conversion losses.</li>' +
-      '<li>Roof area adds ' + Math.round((A.panelSpacing - 1) * 100) + '% on top of the panel area for spacing.</li>' +
-      '<li>Battery banks are limited to the parallel count published on the datasheet, or four units where none is published.</li>' +
-      '<li>Specifications come from the published EURONET datasheets. Solar input limits marked as estimates come from charge current.</li>' +
-      '</ul></div></details>';
-  }
-
-  function ctaBandHtml() {
-    var r = region();
-    var wa = 'https://wa.me/' + r.wa + '?text=' + encodeURIComponent('Hello EURONET, I used the solar load calculator and need help choosing. My results ' + shareUrl());
-    return '<section class="cta-band"><div><h3>Want an engineer to check this on site</h3>' +
-      '<p>These sizes are a strong starting point. Final design depends on your roof, wiring and local rules. Our ' + esc(r.office) + ' team can confirm the system and the price.</p></div>' +
-      '<div class="cta-actions"><a class="btn btn-sun" href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp ' + esc(r.office) + '</a>' +
-      '<a class="btn btn-ghost" href="tel:' + esc(r.phone.replace(/\s/g, '')) + '">Call ' + esc(r.phone) + '</a>' +
-      '<a class="btn btn-ghost" href="https://www.euronetworld.com/contact" target="_blank" rel="noopener">Contact page</a></div></section>';
-  }
-
-  function renderResults() {
-    var host = $('#results');
-    var res = E.sizeAll(state.qty, engineOpts(), D);
-    var L = res.load;
-    var r = region();
-    $('#results-sub').textContent = L.count
-      ? n0(L.runW) + ' W running, ' + hrs(state.hours) + ' of backup' + (solarOn() ? ', solar covering ' + pct(state.coverage) + ' of daily use' : ', no solar') + ', in ' + r.label + '.'
-      : '';
-    if (!L.count) {
-      host.innerHTML = '<div class="expert"><h3>Nothing selected yet</h3><p>Add at least one appliance and we will size the system.</p><div class="cta-actions"><button type="button" class="btn btn-primary" data-go="1">Choose appliances</button></div></div>';
+    if (!res.best) {
+      var why = res.expert ? 'This is bigger than we size online. Our engineers design systems like this from a site survey.' : 'Pick a home type or add appliances and the system appears here.';
+      host.innerHTML = '<div class="answer-card"><p class="headline">' + esc(why) + '</p><div class="answer-cta"><a class="btn btn-wa" target="_blank" rel="noopener" href="https://wa.me/' + r.wa + '?text=' + encodeURIComponent('Hello EURONET, I need help sizing a solar system. ' + shareUrl()) + '">Talk to an engineer on WhatsApp</a></div></div>';
+      $('#jump-text').textContent = 'Your system';
       return;
     }
-    var html = loadCardHtml(res);
-    if (res.expert || res.tiers.every(function (t) { return t.unavailable; })) {
-      html += '<div class="expert"><h3>This is a large system</h3><p>Your connected load of ' + pw(L.connectedW) + ' is beyond what we size online. Our engineers design systems like this from a site survey, often with several inverters in parallel.</p><div class="cta-actions">' +
-        engineerBtn(res).replace('<div class="cta">', '').replace(/<\/div>$/, '') + '</div></div>';
-      host.innerHTML = html;
-      return;
-    }
-    html += '<div class="tiers">' + res.tiers.map(function (t) { return tierCard(t, res); }).join('') + '</div>';
-    html += compareHtml(res);
-    html += howHtml(res);
-    html += ctaBandHtml();
-    html += '<div class="share-row"><button type="button" class="btn btn-small btn-ghost" id="copy-link">Copy a link to these results</button>' +
-      '<button type="button" class="btn btn-small btn-ghost" id="print">Print or save as PDF</button></div>';
-    html += '<p class="fine">This calculator gives indicative sizes for pre-sales guidance. Real output depends on shading, roof angle, cable runs, temperature and how you use the appliances. Prices are confirmed by our sales team.</p>';
-    host.innerHTML = html;
+    var opts = [res.best].concat(res.alternatives);
+    if (state.view >= opts.length) state.view = 0;
+    var sys = opts[state.view];
+    var stockCls = sys.ready ? '' : (res.fromStock ? ' part' : ' order');
+    var stockTxt = sys.ready ? 'Ready now from ' + r.office + ' stock' : (res.fromStock ? 'Mostly in ' + r.office + ' stock, panels to top up' : 'To order for ' + r.label);
+    var wa = 'https://wa.me/' + r.wa + '?text=' + encodeURIComponent(message(sys, res));
+    var mail = 'mailto:contact@euronet.co?subject=' + encodeURIComponent('Solar quote request') + '&body=' + encodeURIComponent(message(sys, res));
+
+    var alts = opts.map(function (o, i) {
+      if (i === state.view) return '';
+      var label = i === 0 ? 'Our best match' : ALT_NAMES[o.label] || 'Another option';
+      var desc = (o.inverter.units > 1 ? o.inverter.units + ' x ' : '') + o.inverter.item.name + (o.battery ? ' with ' + o.battery.units + ' x ' + o.battery.model.name : '') + (o.battery ? ', ' + hrs(o.battery.runtimeH) + ' backup' : '');
+      return '<div class="alt"><div class="ph"><img src="' + esc(o.inverter.item.img) + '" alt="" loading="lazy"></div><div><strong>' + esc(label) + '</strong><p>' + esc(desc) + '. ' + (o.ready ? 'In stock.' : 'Part to order.') + '</p>' +
+        '<button type="button" class="btn btn-small btn-ghost" data-view="' + i + '">Show this one</button></div></div>';
+    }).join('');
+
+    host.innerHTML = '<div class="answer-card">' +
+      '<span class="stockline' + stockCls + '"><i></i>' + esc(stockTxt) + '</span>' +
+      '<p class="answer-tag">' + (state.view === 0 ? 'Best match' : esc(ALT_NAMES[sys.label] || 'Option')) + '</p>' +
+      '<p class="headline">' + esc(headline(sys, res)) + '</p>' +
+      diagram(sys, res) + statsHtml(sys, res) + partsHtml(sys) + kitHtml(sys) + notesHtml(sys, res) +
+      '<div class="answer-cta"><a class="btn btn-wa" href="' + esc(wa) + '" target="_blank" rel="noopener">Get this quote on WhatsApp</a><a class="btn btn-ghost" href="' + esc(mail) + '">Email this system</a></div>' +
+      (alts ? '<div class="alts"><h3>Other ways from stock</h3>' + alts + '</div>' : '') +
+      howHtml(sys, res) +
+      '<div class="share-row"><button type="button" class="btn btn-small btn-ghost" id="copy-link">Copy a link to this</button><button type="button" class="btn btn-small btn-ghost" id="print">Print or save as PDF</button></div>' +
+      '<p class="fine">Indicative sizing for a quote. Shade, roof angle, cable runs and how you use your appliances change real output. Prices come from our sales team.</p>' +
+      '</div>';
+    $('#jump-text').textContent = short(sys.inverter.item.name) + (sys.battery ? ' + ' + kwh(sys.battery.totalKWh) : '') + (sys.pv ? ' + ' + sys.pv.count + ' panels' : '');
+  }
+
+  var timer = null;
+  function changed() {
+    save();
+    syncControls();
+    clearTimeout(timer);
+    timer = setTimeout(function () { state.view = 0; renderAnswer(); }, 60);
   }
 
   /* ---------- events ---------- */
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.name === 'goal') {
+      state.goal = t.value;
+      if (state.goal === 'off') { state.duration = 'night'; state.hours = 14; state.coverage = 1; }
+      else if (state.goal === 'grid') state.coverage = 0.7;
+      else if (state.goal === 'backup') { var d = byId(D.DURATIONS, state.duration) || D.DURATIONS[0]; state.coverage = d.coverage; state.hours = d.hours; }
+      $$('input[name="duration"]').forEach(function (r) { r.checked = r.value === state.duration; });
+      changed();
+    } else if (t.name === 'preset') {
+      state.preset = t.value; state.qty = clone(byId(D.PRESETS, t.value).qty); renderAppliances(); changed();
+    } else if (t.name === 'pump') { state.pumpHp = +t.value; changed(); }
+    else if (t.name === 'duration') {
+      var du = byId(D.DURATIONS, t.value); state.duration = du.id; state.hours = du.hours; state.coverage = state.goal === 'grid' ? state.coverage : du.coverage; changed();
+    } else if (t.name === 'together') { state.simult = +t.value; changed(); }
+    else if (t.id === 'region') { state.region = t.value; state.psh = region().psh; changed(); }
+    else if (t.id === 'solar') { state.solar = t.checked; changed(); }
+    else if (t.id === 'hours') { state.duration = 'custom'; $$('input[name="duration"]').forEach(function (r) { r.checked = false; }); changed(); }
+    else if (t.id === 'coverage') changed();
+    else if (t.id === 'psh') { var v = +t.value; state.psh = isFinite(v) && v > 0 ? clamp(v, 3, 7.5) : region().psh; changed(); }
+  });
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (t.id === 'hours') { state.hours = +t.value; $('#hours-out').textContent = state.hours + ' h'; }
+    if (t.id === 'coverage') { state.coverage = +t.value / 100; $('#coverage-out').textContent = t.value + '%'; }
+    if (t.id === 'search') { state.search = t.value; renderAppliances(); }
+  });
   document.addEventListener('click', function (e) {
-    var t = e.target.closest('[data-go]');
-    if (t && !t.disabled) { go(Number(t.dataset.go)); return; }
-
     var act = e.target.closest('[data-act]');
-    if (act && !act.disabled) {
-      var id = act.dataset.id;
-      var cur = state.qty[id] || 0;
-      setQty(id, act.dataset.act === 'inc' ? cur + 1 : cur - 1);
-      return;
-    }
-
+    if (act && !act.disabled) { var id = act.dataset.id; setQty(id, (state.qty[id] || 0) + (act.dataset.act === 'inc' ? 1 : -1)); return; }
     var f = e.target.closest('[data-filter]');
-    if (f) {
-      state.filter = f.dataset.filter;
-      $$('#filter button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === f)); });
-      renderAppliances();
-      return;
-    }
-
+    if (f) { state.filter = f.dataset.filter; $$('#filter button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === f)); }); renderAppliances(); return; }
+    var v = e.target.closest('[data-view]');
+    if (v) { state.view = +v.dataset.view; renderAnswer(); $('#answer').scrollIntoView({ block: 'start' }); return; }
     if (e.target.id === 'copy-link') {
-      var url = shareUrl();
-      var done = function () { e.target.textContent = 'Link copied'; setTimeout(function () { e.target.textContent = 'Copy a link to these results'; }, 2200); };
+      var url = shareUrl(), btn = e.target;
+      var done = function () { btn.textContent = 'Link copied'; setTimeout(function () { btn.textContent = 'Copy a link to this'; }, 2000); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy this link', url); });
       else window.prompt('Copy this link', url);
-      return;
     }
-    if (e.target.id === 'print') { window.print(); }
+    if (e.target.id === 'print') window.print();
   });
-
-  $('#presets').addEventListener('change', function (e) {
-    var p = byId(D.PRESETS, e.target.value);
-    if (!p) return;
-    state.preset = p.id;
-    state.qty = clone(p.qty);
-    renderAppliances();
-    onLoadChanged();
+  var narrow = null;
+  window.addEventListener('resize', function () {
+    var now = $('#answer').clientWidth < 520;
+    if (narrow !== null && now !== narrow) renderAnswer();
+    narrow = now;
   });
-
-  $('#search').addEventListener('input', function (e) { state.search = e.target.value; renderAppliances(); });
-
-  $('#region').addEventListener('change', function (e) {
-    state.region = e.target.value;
-    state.psh = region().psh;
-    syncStep2Controls();
-    save();
-  });
-  $('#together').addEventListener('change', function (e) { state.simult = Number(e.target.value); updateHoursHint(); onLoadChanged(); });
-  $('#grid').addEventListener('change', function (e) {
-    var g = byId(D.GRID_SITUATIONS, e.target.value);
-    if (!g) return;
-    state.grid = g.id;
-    state.hours = g.hours;
-    state.coverage = g.coverage;
-    if (g.offgrid) state.solar = true;
-    syncStep2Controls();
-    save();
-  });
-  $('#hours').addEventListener('input', function (e) {
-    state.hours = Number(e.target.value);
-    $('#hours-out').textContent = state.hours + ' h';
-    updateHoursHint();
-  });
-  $('#hours').addEventListener('change', save);
-  $('#solar').addEventListener('change', function (e) {
-    state.solar = e.target.checked;
-    syncStep2Controls();
-    save();
-  });
-  $('#coverage').addEventListener('input', function (e) {
-    state.coverage = Number(e.target.value) / 100;
-    $('#coverage-out').textContent = e.target.value + '%';
-  });
-  $('#coverage').addEventListener('change', save);
-  $('#psh').addEventListener('change', function (e) {
-    var v = Number(e.target.value);
-    state.psh = isFinite(v) && v > 0 ? clamp(v, 3, 7.5) : region().psh;
-    e.target.value = nd(state.psh, 1);
-    save();
-  });
-  $('#show-results').addEventListener('click', function () { go(3); });
-
-  // product photos come from euronetworld.com. If one is missing, drop it quietly.
-  document.addEventListener('error', function (e) {
-    var el = e.target;
-    if (el && el.tagName === 'IMG' && el.closest('.prod')) el.style.visibility = 'hidden';
-  }, true);
+  document.addEventListener('error', function (e) { if (e.target && e.target.tagName === 'IMG') e.target.style.visibility = 'hidden'; }, true);
 
   /* ---------- start ---------- */
-  function init() {
-    var shared = null;
-    var m = /[#&]s=([^&]+)/.exec(location.hash);
-    if (m) shared = decodeShare(m[1]);
-    var saved = shared || restore();
-    if (saved) { var keep = { filter: 'all', search: '', step: 1 }; state = saved; state.filter = keep.filter; state.search = keep.search; }
-    renderPresets();
-    renderAppliances();
-    onLoadChanged();
-    go(shared ? 3 : 1, true);
-  }
-  init();
+  var m = /[#&]s=([^&]+)/.exec(location.hash);
+  var saved = (m && decodeShare(m[1])) || restore();
+  if (saved) { state = saved; state.filter = 'all'; state.search = ''; state.view = 0; }
+  renderQuestions();
+  fetch('data/stock.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (s) { STOCK = s; renderAnswer(); }).catch(function () {
+    STOCK = { items: {} };
+    renderAnswer();
+  });
 })();

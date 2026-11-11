@@ -97,169 +97,30 @@
    * Office numbers are the public ones listed on euronetworld.com.
    */
   var REGIONS = [
-    { id: 'ae', label: 'United Arab Emirates', psh: 5.5, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' },
-    { id: 'sa', label: 'Saudi Arabia', psh: 5.8, phone: '+966 58 133 0529', wa: '966581330529', office: 'Riyadh' },
-    { id: 'sd', label: 'Sudan', psh: 5.8, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' },
-    { id: 'ng', label: 'Nigeria', psh: 4.8, phone: '+234 916 304 1000', wa: '2349163041000', office: 'Lagos' },
-    { id: 'xx', label: 'Another country', psh: 5.0, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' }
+    { id: 'ae', stock: 'ae', label: 'United Arab Emirates', psh: 5.5, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' },
+    { id: 'sa', stock: 'sa', label: 'Saudi Arabia', psh: 5.8, phone: '+966 58 133 0529', wa: '966581330529', office: 'Riyadh' },
+    { id: 'sd', stock: 'ae', label: 'Sudan', psh: 5.8, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' },
+    { id: 'ng', stock: 'ng', label: 'Nigeria', psh: 4.8, phone: '+234 916 304 1000', wa: '2349163041000', office: 'Lagos' },
+    { id: 'xx', stock: 'ae', label: 'Another country', psh: 5.0, phone: '+971 55 552 7791', wa: '971555527791', office: 'Dubai' }
   ];
 
-  var GRID_SITUATIONS = [
-    { id: 'short', label: 'Short power cuts', hint: 'The grid is mostly steady', hours: 3, coverage: 0.4, offgrid: false },
-    { id: 'long', label: 'Long or frequent cuts', hint: 'Outages that last hours', hours: 8, coverage: 0.7, offgrid: false },
-    { id: 'off', label: 'No grid at all', hint: 'Solar and battery run everything', hours: 14, coverage: 1, offgrid: true }
+  /* ---------- What the customer wants ---------- */
+  var GOALS = [
+    { id: 'backup', label: 'Power backup with solar', hint: 'Keeps the lights on in a power cut and trims the bill' },
+    { id: 'grid', label: 'Cut my electricity bill', hint: 'Panels feed your home, no battery' },
+    { id: 'off', label: 'No grid at all', hint: 'Solar and batteries run everything' },
+    { id: 'pump', label: 'Solar water pump', hint: 'The pump runs from the sun, no battery' }
   ];
 
-  /* ---------- Inverters ----------
-   * ratedW   continuous output
-   * busV     battery bus voltage the unit needs
-   * surgeW   published surge power. null = not published, so peak load must fit in ratedW.
-   * pvMaxW   max PV input. pvPublished false = approx, min(charge current x charge voltage, 1.5 x rated).
-   */
-  var INVERTERS = [
-    {
-      id: 'a10', series: 'A Series', name: 'A 12V 1.0kW Off Grid Inverter', model: 'GEN-5 A 1K',
-      ratedW: 1000, busV: 12, surgeW: null, chargeA: 40, pvMaxW: 576, pvPublished: false, mppt: '20-150 V DC', ip: 'IP21',
-      kind: 'Off-grid inverter with MPPT charger',
-      points: ['Inverter, MPPT solar charger and AC charger in one box', 'Pure sine wave 230 V output', 'Solar charging up to 40 A'],
-      path: 'a-12v-10kw-off-grid-inverter-ip21', img: media('A Series 1k-1-768x1024.webp')
-    },
-    {
-      id: 'a22', series: 'A Series', name: 'A 12V 2.2kW Off Grid Inverter', model: 'GEN-5 A 2.2K',
-      ratedW: 2200, busV: 12, surgeW: null, chargeA: 80, pvMaxW: 1152, pvPublished: false, mppt: '55-450 V DC', ip: 'IP21',
-      kind: 'Off-grid inverter with MPPT charger',
-      points: ['Inverter, MPPT solar charger and AC charger in one box', 'Pure sine wave 230 V output', 'Solar charging up to 80 A'],
-      path: 'a-12v-22kw-off-grid-inverter-ip21', img: media('A Series 2-768x1024.webp')
-    },
-    {
-      id: 'a32', series: 'A Series', name: 'A 24V 3.2kW Off Grid Inverter', model: 'GEN-5 A 3.2K',
-      ratedW: 3200, busV: 24, surgeW: null, chargeA: 80, pvMaxW: 2304, pvPublished: false, mppt: '55-450 V DC', ip: 'IP21',
-      kind: 'Off-grid inverter with MPPT charger',
-      points: ['Inverter, MPPT solar charger and AC charger in one box', 'Pure sine wave 230 V output', 'Solar charging up to 80 A'],
-      path: 'a-24v-32kw-off-grid-inverter-ip21', img: media('A Series 3-768x1024.webp')
-    },
-    {
-      id: 's42', series: 'S Series', name: 'S 24V 4.2kW Hybrid Inverter', model: 'GEN-5 S 4.2K',
-      ratedW: 4200, busV: 24, surgeW: null, chargeA: 120, pvMaxW: 6200, pvPublished: true, mppt: '60-450 V DC', ip: 'IP21',
-      kind: 'Hybrid solar inverter',
-      points: ['Two AC outputs, so critical and general loads stay separate', 'Runs from solar alone when the battery is empty', 'Up to 98% peak efficiency, lithium BMS link, Wi-Fi'],
-      path: 's-24v-42kw-hybrid-inverter-ip21', img: media('S SERIES 4.2-768x1024.webp')
-    },
-    {
-      id: 's62', series: 'S Series', name: 'S 48V 6.2kW Hybrid Inverter', model: 'GEN-5 S 6.2K',
-      ratedW: 6200, busV: 48, surgeW: null, chargeA: 120, pvMaxW: 6912, pvPublished: false, mppt: '60-450 V DC', ip: 'IP21',
-      kind: 'Hybrid solar inverter',
-      points: ['Two AC outputs, so critical and general loads stay separate', 'Runs from solar alone when the battery is empty', 'Up to 98% peak efficiency, lithium BMS link, Wi-Fi'],
-      path: 's-48v-62kw-hybrid-inverter-ip21', img: media('S SERIES 6.2-768x1024.webp')
-    },
-    {
-      id: 's102', series: 'S Series', name: 'S 48V 10.2kW Hybrid Inverter', model: 'GEN-5 S 10.2K',
-      ratedW: 10200, busV: 48, surgeW: null, chargeA: 160, pvMaxW: 10800, pvPublished: true, mppt: '90-450 V DC, dual MPPT', ip: 'IP21',
-      kind: 'Hybrid solar inverter',
-      points: ['Dual MPPT, 5.4 kW on each input', 'Two AC outputs, so critical and general loads stay separate', 'Up to 98% peak efficiency, lithium BMS link, Wi-Fi'],
-      path: 's-48v-102kw-hybrid-inverter-ip21', img: media('S SERIES 10.2-768x1024.webp')
-    },
-    {
-      id: 'rsz12', series: 'RSZ Series', name: 'RSZ 48V 12kW Hybrid Inverter', model: 'GEN-5 RSZ 12K',
-      ratedW: 12000, busV: 48, surgeW: 18000, chargeA: 230, pvMaxW: 14500, pvPublished: true, mppt: '120-480 V DC, dual MPPT', ip: 'IP20',
-      kind: 'Hybrid solar inverter',
-      points: ['Surge power 18,000 VA for pumps, compressors and ACs starting together', 'Dual independent MPPT, up to 14.5 kW of solar', 'Parallel up to 9 units'],
-      path: 'rsz-48v-12kw-hybrid-inverter-ip21', img: media('RSZ SERIES 12-768x1024.webp')
-    },
-    {
-      id: 'pro3', series: 'Pro IP65', name: 'Hybrid Inverter 3kW Pro IP65', model: 'E-PRO3KW230V-IP65',
-      ratedW: 3000, busV: 24, surgeW: null, chargeA: 100, pvMaxW: 2880, pvPublished: false, mppt: '60-450 V DC', ip: 'IP65',
-      kind: 'Hybrid solar inverter, outdoor rated',
-      points: ['IP65, so it can be mounted outdoors', 'Wi-Fi monitoring and remote app built in', 'Solar charging up to 100 A'],
-      path: 'hybrid-inverter-3kw-pro-ip65', img: media('Hybrid Inverter 3KW-6KW Pro IP65-768x1024.webp')
-    },
-    {
-      id: 'pro6', series: 'Pro IP65', name: 'Hybrid Inverter 6kW Pro IP65', model: 'E-PRO6KW230V-IP65',
-      ratedW: 6000, busV: 48, surgeW: null, chargeA: null, pvMaxW: 9000, pvPublished: false, mppt: '50-500 V DC, 2 MPPT', ip: 'IP65',
-      kind: 'Hybrid solar inverter, outdoor rated',
-      points: ['IP65, so it can be mounted outdoors', 'Two MPPT trackers', 'Wi-Fi monitoring and remote app built in'],
-      path: 'hybrid-inverter-6kw-pro-ip65', img: media('Hybrid Inverter 3KW-6KW Pro IP65-768x1024.webp')
-    },
-    {
-      id: 'pro10', series: 'Pro IP65', name: 'Hybrid Inverter 10kW Pro IP65', model: 'E-PRO10KW230V-IP65',
-      ratedW: 10000, busV: 48, surgeW: null, chargeA: 220, pvMaxW: 12672, pvPublished: false, mppt: '50-450 V DC, 2 MPPT', ip: 'IP65',
-      kind: 'Hybrid solar inverter, outdoor rated',
-      points: ['IP65, so it can be mounted outdoors', 'Two MPPT trackers, solar charging up to 220 A', 'Parallel up to 6 units single-phase'],
-      path: 'hybrid-inverter-10kw-pro-ip65', img: media('Hybrid Inverter 10KW-16KW Pro IP65-1.webp')
-    },
-    {
-      id: 'pro16', series: 'Pro IP65', name: 'Hybrid Inverter 16kW Pro IP65', model: 'E-PRO16KW230V-IP65',
-      ratedW: 16000, busV: 48, surgeW: null, chargeA: 250, pvMaxW: 14400, pvPublished: false, mppt: '50-450 V DC, 3 MPPT', ip: 'IP65',
-      kind: 'Hybrid solar inverter, outdoor rated',
-      points: ['IP65, so it can be mounted outdoors', 'Three MPPT trackers, solar charging up to 250 A', 'Parallel up to 6 units single-phase'],
-      path: 'hybrid-inverter-16kw-pro-ip65', img: media('Hybrid Inverter 10KW-16KW Pro IP65-1.webp')
-    }
+  var DURATIONS = [
+    { id: 'short', label: 'A few hours', hint: 'Short power cuts', hours: 3, coverage: 0.4 },
+    { id: 'evening', label: 'The whole evening', hint: 'Cuts that last hours', hours: 8, coverage: 0.7 },
+    { id: 'night', label: 'All night and more', hint: 'Long outages or no grid', hours: 14, coverage: 1 }
   ];
-  INVERTERS.forEach(function (i) { i.url = SITE + '/products/solar-energy/solar-inverters/' + i.path; });
 
-  /* ---------- Batteries ----------
-   * v / ah     nominal volts and amp-hours of one unit
-   * maxW       continuous discharge power one unit can give
-   * maxPar     most units we allow in parallel (datasheet figure where published, else 4)
-   */
-  var BATTERIES = [
-    { id: 'l128_100', chem: 'lfp', name: 'Lithium Battery 12.8V 100Ah', v: 12.8, ah: 100, maxW: 12.8 * 50, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-128v-100ah', img: media('12.8V 100AH-7-768x1024.webp') },
-    { id: 'l128_150', chem: 'lfp', name: 'Lithium Battery 12.8V 150Ah', v: 12.8, ah: 150, maxW: 12.8 * 50, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-128v-150ah', img: media('12.8V150AH  (2)-768x1024.webp') },
-    { id: 'l128_205', chem: 'lfp', name: 'Lithium Battery 12.8V 205Ah', v: 12.8, ah: 205, maxW: 12.8 * 102.5, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-128v-205ah', img: media('12.8V - 205-1-768x1024.webp') },
-    { id: 'l128_300', chem: 'lfp', name: 'Lithium Battery 12.8V 300Ah', v: 12.8, ah: 300, maxW: 12.8 * 150, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-128v-300ah', img: media('12.8V - 300-768x1024.webp') },
-    { id: 'l256_100', chem: 'lfp', name: 'Lithium Battery 25.6V 100Ah', v: 25.6, ah: 100, maxW: 25.6 * 100, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-256v-100ah', img: media('25.6V 100AH-768x1024.webp') },
-    { id: 'l256_205', chem: 'lfp', name: 'Lithium Battery 25.6V 205Ah', v: 25.6, ah: 205, maxW: 25.6 * 102.5, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-256v-205ah', img: media('25.6V 205AH-768x1024.webp') },
-    { id: 'l512_100', chem: 'lfp', name: 'Lithium Battery 51.2V 100Ah', v: 51.2, ah: 100, maxW: 51.2 * 100, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-512v-100ah', img: media('51.2V 100AH-768x1024.webp') },
-    { id: 'l512_205', chem: 'lfp', name: 'Lithium Battery 51.2V 205Ah', v: 51.2, ah: 205, maxW: 51.2 * 102.5, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-512v-205ah', img: media('51.2V 205AH-768x1024.webp') },
-    { id: 'l512_300', chem: 'lfp', name: 'Lithium Battery 51.2V 300Ah', v: 51.2, ah: 300, maxW: 51.2 * 150, maxPar: 4, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-512v-300ah', img: media('51.2V 300AH-768x1024.webp') },
-    { id: 'l512_314', chem: 'lfp', name: 'Lithium Battery 51.2V 314Ah', v: 51.2, ah: 314, maxW: 10240, maxPar: 15, cycles: '6,000 cycles at 80% DoD', path: 'lithium-battery-512v-314ah', img: media('51.2V314AH-768x1024.webp') },
-    { id: 'l512_314ip', chem: 'lfp', name: 'Lithium Battery 51.2V 314Ah IP65', v: 51.2, ah: 314, maxW: 10000, maxPar: 8, cycles: '8,000 cycles design life', ip: 'IP65', path: 'lithium-battery-512v-314ah-ip65', img: media('Lithium Battery 51.2V 314Ah IP65 FRONT-768x1024.webp') },
-
-    { id: 'g100', chem: 'gel', name: 'Gel Battery 12V 100Ah Blue', v: 12, ah: 100, maxW: 12 * 25, maxPar: 4, path: 'gel-battery-12v-100ah-blue', img: media('12V 100AH-768x1024.webp') },
-    { id: 'g150', chem: 'gel', name: 'Gel Battery 12V 150Ah Blue', v: 12, ah: 150, maxW: 12 * 37.5, maxPar: 4, path: 'gel-battery-12v-150ah-blue', img: media('12V 150AH-768x1024.webp') },
-    { id: 'g200', chem: 'gel', name: 'Gel Battery 12V 200Ah Blue', v: 12, ah: 200, maxW: 12 * 50, maxPar: 4, path: 'gel-battery-12v-200ah-blue', img: media('12V 200AH-768x1024.webp') },
-    { id: 'g250', chem: 'gel', name: 'Gel Battery 12V 250Ah Blue', v: 12, ah: 250, maxW: 12 * 62.5, maxPar: 4, path: 'gel-battery-12v-250ah-blue', img: media('12V 250AH-768x1024.webp') }
-  ];
-  BATTERIES.forEach(function (b) { b.url = SITE + '/products/solar-energy/batteries/' + b.path; });
-
-  /* ---------- Solar panels (only models with published voltage and size data) ---------- */
-  var PANELS = [
-    {
-      id: 'p450', name: 'Solar Panel 450W Bifacial', model: 'EU-450-BMA-HV', wp: 450, areaM2: (2.094 * 1.038), eff: '21.1%',
-      points: ['Bifacial dual-glass, picks up reflected light', 'IP68 junction box, 1500 V DC system rating', '25-year linear power warranty'],
-      path: 'solar-panel-450w-bifacial', img: media('450w-768x1024.webp')
-    },
-    {
-      id: 'p540', name: '540 Watt Bifacial Solar Panel', model: 'EU-540W', wp: 540, areaM2: (2.256 * 1.133), eff: '21.1%',
-      points: ['TOPCon bifacial dual-glass, 182 mm half-cell', 'IP68 junction box, 1500 V DC system rating', '25-year linear power warranty'],
-      path: '540w', img: media('540w-768x1024.webp')
-    }
-  ];
-  PANELS.forEach(function (p) { p.url = SITE + '/products/solar-energy/solar-panels/' + p.path; });
-
-  /* ---------- The three recommendation levels ---------- */
-  var TIERS = [
-    {
-      key: 'value', label: 'Essential', tag: 'Gel batteries, simple and proven',
-      blurb: 'Maintenance-free gel batteries and an inverter sized close to your load. A straightforward way to keep what you picked running.',
-      loadFactor: 0.9, reserve: 1.0, pvMargin: 1.0, panel: 'p450',
-      inverters: ['a10', 'a22', 'a32', 's42', 's62', 's102', 'rsz12'],
-      battery: { chem: 'gel', dod: 0.5, ids: ['g100', 'g150', 'g200', 'g250'] }
-    },
-    {
-      key: 'best', label: 'Best Fit', tag: 'Our pick for most homes',
-      blurb: 'Lithium storage that lasts, an inverter with comfortable spare capacity and a little margin on the battery and panels.',
-      loadFactor: 0.75, reserve: 1.15, pvMargin: 1.1, panel: 'p540',
-      inverters: ['a22', 'a32', 's42', 's62', 's102', 'rsz12'],
-      battery: { chem: 'lfp', dod: 0.9, ids: ['l128_100', 'l128_150', 'l128_205', 'l128_300', 'l256_100', 'l256_205', 'l512_100', 'l512_205', 'l512_300', 'l512_314'] }
-    },
-    {
-      key: 'future', label: 'Future-proof', tag: 'Room to grow, built for outdoors',
-      blurb: 'Weatherproof IP65 inverter and battery with generous headroom, so you can add loads or panels later.',
-      loadFactor: 0.6, reserve: 1.3, pvMargin: 1.25, panel: 'p540',
-      inverters: ['pro3', 'pro6', 'pro10', 'pro16'],
-      battery: { chem: 'lfp', dod: 0.9, ids: ['l256_100', 'l256_205', 'l512_205', 'l512_314ip'] }
-    }
+  var PUMPS = [
+    { hp: 0.5, kw: 0.37 }, { hp: 1, kw: 0.75 }, { hp: 2, kw: 1.5 }, { hp: 3, kw: 2.2 }, { hp: 5, kw: 3.7 }, { hp: 7.5, kw: 5.5 },
+    { hp: 10, kw: 7.5 }, { hp: 15, kw: 11 }, { hp: 20, kw: 15 }, { hp: 25, kw: 18.5 }, { hp: 30, kw: 22 }, { hp: 40, kw: 30 }
   ];
 
   return {
@@ -268,16 +129,18 @@
     APPLIANCES: APPLIANCES,
     PRESETS: PRESETS,
     REGIONS: REGIONS,
-    GRID_SITUATIONS: GRID_SITUATIONS,
-    INVERTERS: INVERTERS,
-    BATTERIES: BATTERIES,
-    PANELS: PANELS,
-    TIERS: TIERS,
+    GOALS: GOALS,
+    DURATIONS: DURATIONS,
+    PUMPS: PUMPS,
     ASSUMPTIONS: {
       invEff: 0.92,        // battery to AC conversion efficiency
       perfRatio: 0.75,     // PV system performance ratio (heat, dust, wiring, conversion)
       panelSpacing: 1.15,  // roof area allowance on top of panel area
-      maxConnectedW: 40000 // above this we ask for an engineer
+      maxConnectedW: 40000, // above this we ask for an engineer
+      gridDcAc: 1.2,        // target solar to inverter ratio for grid-tied systems
+      pumpArrayRatio: 1.5,  // solar array watts per pump kW
+      panelsPerString: 4,   // typical, used only to estimate connectors and combiner boxes
+      stockCap: 50          // published stock is capped here
     }
   };
 });
