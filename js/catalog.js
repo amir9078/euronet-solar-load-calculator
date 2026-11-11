@@ -69,6 +69,13 @@
     { id: 'lf1250', kind: 'lf', series: 'LF Series', name: 'LF Hybrid Inverter 1250VA 12V', ratedW: 1000, busV: 12, surgeX: 3, ip: 'IP21', path: 'lf-hybrid-inverter-1250va-12v', img: 'LF Hybrid Inverter 1250VA 12V.webp', match: ['^LF HYBRID INVERTER 1250VA'], points: ['Toroidal transformer, takes 3 times its rating for motor starts', 'Pure sine wave, about 10 ms changeover'] },
     { id: 'lf2000', kind: 'lf', series: 'LF Series', name: 'LF Hybrid Inverter 2000VA 24V', ratedW: 1600, busV: 24, surgeX: 3, ip: 'IP21', path: 'lf-hybrid-inverter-2050va-24v', img: 'LF Hybrid Inverter 2050VA 24V.webp', match: ['^LF HYBRID INVERTER 2050VA'], points: ['Toroidal transformer, takes 3 times its rating for motor starts', 'Pure sine wave, about 10 ms changeover'] },
     { id: 'lf3500', kind: 'lf', series: 'LF Series', name: 'LF Hybrid Inverter 3500VA 24V', ratedW: 2400, busV: 24, surgeX: 3, ip: 'IP21', path: 'lf-hybrid-inverter-3500va-24v', img: 'LF Hybrid Inverter 3500VA 24V.webp', match: ['^LF HYBRID INVERTER 3500VA'], points: ['Toroidal transformer, takes 3 times its rating for motor starts', 'Pure sine wave, about 10 ms changeover'] },
+    // Modified sine (datasheet: surge 2 x rating, 12 V mode 80% on the bigger units, so we use 24 V)
+    { id: 'mf500', kind: 'mf', series: 'MF Series', name: 'MF Inverter 500W 12V', ratedW: 500, busV: 12, surgeX: 2, ip: 'IP20', path: 'mf-inverter-500w-12v', img: 'MF 500W.webp', match: ['^MF INVERTER 500W'], points: ['Modified sine wave, 12 V', 'Surge 1000 W for a moment, for lights, fans, TV and chargers'] },
+    { id: 'mf1000', kind: 'mf', series: 'MF Series', name: 'MF Inverter 1000W 12V/24V', ratedW: 1000, busV: 24, surgeX: 2, ip: 'IP20', path: 'mf-inverter-1000w-12v-24v', img: 'MF 1000.webp', match: ['^MF INVERTER 1000W'], points: ['Modified sine wave, full rating on 24 V', 'Surge 2000 W for a moment, for lights, fans, TV and chargers'] },
+    { id: 'mf1500', kind: 'mf', series: 'MF Series', name: 'MF Inverter 1500W 12V/24V', ratedW: 1500, busV: 24, surgeX: 2, ip: 'IP20', path: 'mf-inverter-1500w-12v-24v', img: 'MF Inverter 1500W 12V24V-1.webp', match: ['^MF INVERTER 1500W'], points: ['Modified sine wave, full rating on 24 V', 'Surge 3000 W for a moment, for lights, fans, TV and chargers'] },
+    { id: 'mf2000', kind: 'mf', series: 'MF Series', name: 'MF Inverter 2000W 12V/24V', ratedW: 2000, busV: 24, surgeX: 2, ip: 'IP20', path: 'mf-inverter-2000w-12v-24v', img: 'MF Inverter 2000W 12V24V-1.webp', match: ['^MF INVERTER 2000W'], points: ['Modified sine wave, full rating on 24 V', 'Surge 4000 W for a moment, for lights, fans, TV and chargers'] },
+    { id: 'mf3000', kind: 'mf', series: 'MF Series', name: 'MF Inverter 3000W 12V/24V', ratedW: 3000, busV: 24, surgeX: 2, ip: 'IP20', path: 'mf-inverter-3000w-12v-24v', img: 'MF 3000.webp', match: ['^MF INVERTER 3000W'], points: ['Modified sine wave, full rating on 24 V', 'Surge 6000 W for a moment, for lights, fans, TV and chargers'] },
+    { id: 'mf5000', kind: 'mf', series: 'MF Series', name: 'MF Inverter 5000W 12V/24V', ratedW: 5000, busV: 24, surgeX: 2, ip: 'IP20', path: 'mf-inverter-5000w-12v-24v', img: 'MF Inverter 5000W 12V24V-1.webp', match: ['^MF INVERTER 5000W'], points: ['Modified sine wave, full rating on 24 V', 'Surge 10000 W for a moment, for lights, fans, TV and chargers'] },
     // Grid-tied
     { id: 'pv5', kind: 'ongrid', series: 'PV Inverter', name: 'PV Inverter 5kW', ratedW: 5000, phase: 1, trackers: 2, ip: 'IP65', path: 'pv-inverter-5kw', img: 'PV Inverter 5k.webp', match: ['^PV INVERTER 5KW$'], points: ['Single-phase 230 V, 2 MPPT', 'Max efficiency 98.3%'] },
     { id: 'pv10', kind: 'ongrid', series: 'PV Inverter', name: 'PV Inverter 10kW', ratedW: 10000, phase: 3, trackers: 2, ip: 'IP66', path: 'pv-inverter-10kw', img: 'PV Inverter 10k.webp', match: ['^PV INVERTER 10KW$'], points: ['Three-phase 400 V, 2 MPPT', 'Max efficiency 98.6%'] },
@@ -99,7 +106,7 @@
     if (i.kind === 'hybrid' || i.kind === 'offgrid' || i.kind === 'hv') {
       if (!i.pvMaxW) { i.pvMaxW = approxPv(i.ratedW, i.busV, i.chargeA); i.pvPublished = false; }
     }
-    i.solar = i.kind !== 'lf' && !(i.kind === 'ess' && !i.pvMaxW);
+    i.solar = i.kind !== 'lf' && i.kind !== 'mf' && !(i.kind === 'ess' && !i.pvMaxW);
   });
 
   /* Batteries. ah is the rating used for energy. maxW is continuous power per unit
@@ -183,5 +190,36 @@
   ];
   ACCESSORIES.forEach(function (a) { a.url = ACC; });
 
-  return { INVERTERS: INVERTERS, BATTERIES: BATTERIES, PANELS: PANELS, ACCESSORIES: ACCESSORIES };
+
+  /* Charge controllers, for inverters without their own solar charger (DC-coupled systems) */
+  var CTRL = SITE + '/products/solar-energy/controllers/';
+  var CONTROLLERS = [
+    { id: 'mppt20', type: 'MPPT', name: 'MPPT Controller 20A', amps: 20, volts: [12, 24, 48], url: CTRL + 'mppt-controller-20ah', img: media('MPPT Controller 20AH.webp'), match: ['^MPPT CONTROLLER 20AH$'] },
+    { id: 'mppt40', type: 'MPPT', name: 'MPPT Controller 40A', amps: 40, volts: [12, 24, 48], url: CTRL + 'mppt-controller-40ah', img: media('MPPT Controller 40AH.webp'), match: ['^MPPT CONTROLLER 40AH$'] },
+    { id: 'mppt60', type: 'MPPT', name: 'MPPT Controller 60A', amps: 60, volts: [12, 24, 48], url: CTRL + 'mppt-controller-60ah', img: media('MPPT Controller 60AH.webp'), match: ['^MPPT CONTROLLER 60AH$'] },
+    { id: 'mppt80', type: 'MPPT', name: 'MPPT Controller 80A', amps: 80, volts: [12, 24, 48], url: CTRL + 'mppt-controller-80ah', img: media('MPPT Controller 80AH.webp'), match: ['^MPPT CONTROLLER 80AH$'] },
+    { id: 'mppt100', type: 'MPPT', name: 'MPPT Controller 100A', amps: 100, volts: [12, 24, 48], url: CTRL + 'mppt-controller-100ah', img: media('MPPT Controller 100AH.webp'), match: ['^MPPT CONTROLLER 100AH$'] },
+    { id: 'pwm10', type: 'PWM', name: 'PWM Controller 10A', amps: 10, volts: [12, 24], url: CTRL + 'pwm-controller-10ah', img: media('PWM Controller 10AH.webp'), match: ['^PWM CONTROLLER 10AH$'] },
+    { id: 'pwm20', type: 'PWM', name: 'PWM Controller 20A', amps: 20, volts: [12, 24], url: CTRL + 'pwm-controller-20ah', img: media('PWM Controller 20AH.webp'), match: ['^PWM CONTROLLER 20AH$'] },
+    { id: 'pwm30', type: 'PWM', name: 'PWM Controller 30A', amps: 30, volts: [12, 24], url: CTRL + 'pwm-controller-30ah', img: media('PWM Controller 30AH.webp'), match: ['^PWM CONTROLLER 30AH$'] },
+    { id: 'pwm40', type: 'PWM', name: 'PWM Controller 40A', amps: 40, volts: [12, 24], url: CTRL + 'pwm-controller-40ah', img: media('PWM Controller 40AH.webp'), match: ['^PWM CONTROLLER 40AH$'] },
+    { id: 'pwm50', type: 'PWM', name: 'PWM Controller 50A', amps: 50, volts: [12, 24], url: CTRL + 'pwm-controller-50ah', img: media('PWM Controller 50AH.webp'), match: ['^PWM CONTROLLER 50AH$'] },
+    { id: 'pwm60', type: 'PWM', name: 'PWM Controller 60A', amps: 60, volts: [12, 24], url: CTRL + 'pwm-controller-60ah', img: media('PWM Controller 60AH.webp'), match: ['^PWM CONTROLLER 60AH$'] },
+  ];
+
+  /* DC pumps: published by maximum head or outlet size only, no wattage */
+  var AGRI = SITE + '/products/solar-energy/agriculture/';
+  var DC_PUMPS = [
+    { id: 'dcsub50', img: media('DC Submersible Pump 50M.webp'), type: 'sub', head: 50, name: 'DC Submersible Pump 50m', url: AGRI + 'dc-submersible-pump-50m', match: ['^DC SUBMERSIBLE PUMP 50M'] },
+    { id: 'dcsub80', img: media('dc-submersible-pump.webp'), type: 'sub', head: 80, name: 'DC Submersible Pump 80m', url: AGRI + 'dc-submersible-pump-80m', match: ['^DC SUBMERSIBLE PUMP 80M'] },
+    { id: 'dcsub120', img: media('dc-submersible-pump.webp'), type: 'sub', head: 120, name: 'DC Submersible Pump 120m with controller', url: AGRI + 'dc-submersible-pump-120m', match: ['^DC SUBMERSIBLE PUMP 120M'] },
+    { id: 'dcsub200', img: media('dc-submersible-pump-2.webp'), type: 'sub', head: 200, name: 'DC Submersible Pump 200m', url: AGRI + 'dc-submersible-pump-200m', match: ['^DC SUBMERSIBLE PUMP 200M'] },
+    { id: 'dcsurf2', img: media('DC Surface Pump 2 Inch.webp'), type: 'surf', outlet: 2, name: 'DC Surface Pump 2 Inch', url: AGRI + 'dc-surface-pump-2-inch', match: ['^DC SURFACE PUMP 2 INCH'] },
+    { id: 'dcsurf3c', img: media('DC Surface Pump 3 Inch.webp'), type: 'surf', outlet: 3, controller: true, name: 'DC Surface Pump & Controller 3 Inch', url: AGRI + 'dc-surface-pump-controller-3-inch', match: ['^DC SURFACE PUMP & CONTROLLER 3 INCH'] },
+    { id: 'dcsurf3', img: media('DC Surface Pump 3 Inch Remote.webp'), type: 'surf', outlet: 3, name: 'DC Surface Pump 3 Inch', url: AGRI + 'dc-surface-pump-3-inch', match: ['^DC SURFACE PUMP 3 INCH'] },
+    { id: 'dcsurf4', img: media('DC Surface Pump 4 Inch.webp'), type: 'surf', outlet: 4, name: 'DC Surface Pump 4 Inch', url: AGRI + 'dc-surface-pump-4-inch', match: ['^DC SURFACE PUMP 4 INCH'] },
+    { id: 'dcpctl', img: media('dc-submersible-pump-controller.webp'), type: 'ctl', name: 'DC Submersible Pump Controller', url: AGRI + 'dc-submersible-pump-controller', match: ['^DC SUBMERSIBLE PUMP CONTROLLER'] }
+  ];
+
+  return { CONTROLLERS: CONTROLLERS, DC_PUMPS: DC_PUMPS, INVERTERS: INVERTERS, BATTERIES: BATTERIES, PANELS: PANELS, ACCESSORIES: ACCESSORIES };
 });

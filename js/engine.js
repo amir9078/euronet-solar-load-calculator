@@ -128,6 +128,26 @@
     return { inStock: inStock, short: pv.short, inputs: inputs, options: options, readyNow: readyNow, swap: swap };
   }
 
+  // MPPT controllers on the battery bus, the fewest units that carry the array current
+  function pickControllers(data, have, needW, busV, strict) {
+    var best = null;
+    var needA = Math.max(1, needW / (busV * 1.2));
+    (data.CONTROLLERS || []).forEach(function (c) {
+      if (c.type !== 'MPPT' || c.volts.indexOf(busV) < 0) return;
+      var n = Math.ceil(needA / c.amps);
+      if (n > 4) return;
+      var short = Math.max(0, n - have(c.id));
+      if (strict && short) return;
+      var cand = { item: c, units: n, short: short, capW: n * c.amps * busV * 1.2 };
+      var better = !best ? true
+        : (best.short === 0) !== (short === 0) ? short === 0
+        : n !== best.units ? n < best.units
+        : c.amps < best.item.amps;
+      if (better) best = cand;
+    });
+    return best;
+  }
+
   function pvSummary(pick, dailyWh, psh, A) {
     var yieldKWh = pick.kWp * psh * A.perfRatio;
     return {
@@ -159,7 +179,7 @@
     }
     if (sys.pv) {
       var strings = Math.max(1, Math.ceil(sys.pv.count / A.panelsPerString));
-      var inputs = Math.min(strings, inv.trackers * u);
+      var inputs = Math.min(strings, sys.controllers ? sys.controllers.units : inv.trackers * u);
       add(byId(data.ACCESSORIES, 'dcb32'), inputs, 'Panel side isolation, one per solar input');
       add(byId(data.ACCESSORIES, 'spd2'), inputs, 'Lightning and surge protection, one per solar input');
       add(byId(data.ACCESSORIES, 'mc4'), strings * 2, 'Two per panel string');
@@ -182,6 +202,7 @@
     if (sys.inverter.short) shortMain.push(sys.inverter.item.name);
     (sys.extraInverters || []).forEach(function (x) { if (x.short) shortMain.push(x.item.name); });
     if (sys.battery && sys.battery.short) shortMain.push(sys.battery.model.name);
+    if (sys.controllers && sys.controllers.short) shortMain.push(sys.controllers.item.name);
     if (sys.pv && sys.pv.short) shortMain.push(sys.pv.panel.name);
     sys.toOrder = shortMain;
     sys.kitShort = sys.kit.filter(function (k) { return k.short > 0; }).map(function (k) { return k.item.name; });
@@ -190,6 +211,7 @@
     if (sys.inverter.short) s -= 30;
     (sys.extraInverters || []).forEach(function (x) { if (x.short) s -= 20; });
     if (sys.battery && sys.battery.short) s -= 30;
+    if (sys.controllers && sys.controllers.short) s -= 15;
     if (sys.pv && sys.pv.short) s -= 8 + 15 * sys.pv.short / sys.pv.count;
     s -= sys.kitShort.length;
     s += depth(have(sys.inverter.item.id));
@@ -204,8 +226,10 @@
     var out = [];
     var needUse = load.avgW * o.backupHours / A.invEff;
     data.INVERTERS.forEach(function (inv) {
-      if (!(inv.kind === 'hybrid' || inv.kind === 'offgrid' || (inv.kind === 'lf' && !solar && !biz))) return;
+      if (!(inv.kind === 'hybrid' || inv.kind === 'offgrid' || ((inv.kind === 'lf' || inv.kind === 'mf') && !biz))) return;
       if (inv.business && !biz) return;
+      // modified sine is not for compressors and pumps
+      if (inv.kind === 'mf' && load.surgeFrom && load.surgeFrom.surge >= 2.5) return;
       var units = 0, tight = false;
       for (var u = 1; u <= inv.parallelMax && !units; u++) {
         var rated = inv.ratedW * u, surge = (inv.surgeW || inv.ratedW) * u;
@@ -221,6 +245,14 @@
       var invShort = Math.max(0, units - have(inv.id));
       if (strict && invShort) return;
 
+      // inverters without a solar charger get panels through MPPT charge controllers (DC-coupled)
+      var needPvW = o.coverage * load.dailyWh / (o.psh * A.perfRatio);
+      var ctrl = null;
+      if (solar && !inv.solar) {
+        ctrl = pickControllers(data, have, needPvW, inv.busV, strict);
+        if (!ctrl) return;
+      }
+
       data.BATTERIES.forEach(function (m) {
         var nominal = needUse / m.dod * 1.15;
         var bank = bankFor(m, inv.busV, nominal, load.runW);
@@ -230,11 +262,12 @@
         var usableWh = bank.totalWh * m.dod;
         var runtimeH = load.avgW > 0 ? usableWh * A.invEff / load.avgW : 0;
         var pv = null;
-        if (solar && inv.solar) {
-          var needW = o.coverage * load.dailyWh / (o.psh * A.perfRatio);
-          pv = pvSummary(panelsFor(data, have, needW, inv.pvMaxW * units, strict), load.dailyWh, o.psh, A);
+        if (solar) {
+          var capW = ctrl ? ctrl.capW : inv.pvMaxW * units;
+          var inputs = ctrl ? ctrl.units : inv.trackers * units;
+          pv = pvSummary(panelsFor(data, have, needPvW, capW, strict), load.dailyWh, o.psh, A);
           pv.target = o.coverage;
-          pv.fill = fillFor(pv, data, have, needW, inv.pvMaxW * units, inv.trackers * units, load.dailyWh, o.psh, A);
+          pv.fill = fillFor(pv, data, have, needPvW, capW, inputs, load.dailyWh, o.psh, A);
         }
         var L = load.runW / (inv.ratedW * units);
         var r = runtimeH / o.backupHours;
@@ -245,6 +278,8 @@
         if (m.chem === 'lfp') x += 8;
         if (m.chem === 'tubular') x -= 2;
         if (inv.kind === 'lf') x -= 2;
+        if (inv.kind === 'mf') x -= 4;
+        if (ctrl) x -= 3 + ctrl.units;
         x -= 6 * (units - 1);
         if (bank.units > 4) x -= 1.5 * (bank.units - 4);
         if (pv) x -= Math.max(0, pv.target - pv.coverage) * 40;
@@ -252,6 +287,7 @@
         out.push(finish({
           goal: o.goal,
           inverter: { item: inv, units: units, short: invShort },
+          controllers: ctrl,
           battery: {
             model: m, units: bank.units, series: bank.series, parallel: bank.parallel, busV: inv.busV,
             totalKWh: bank.totalWh / 1000, usableKWh: usableWh / 1000, needKWh: nominal / 1000, runtimeH: runtimeH, short: batShort
@@ -289,6 +325,18 @@
 
   function pumpSystems(o, data, have, A, strict) {
     var out = [];
+    if (o.pumpType === 'sub' || o.pumpType === 'surf') {
+      (data.DC_PUMPS || []).forEach(function (p) {
+        if (p.type !== o.pumpType) return;
+        if (p.type === 'sub' && p.head < (o.depthM || 0) * 1.1) return;
+        if (p.type === 'surf' && p.outlet !== o.outletIn) return;
+        var short = Math.max(0, 1 - have(p.id));
+        if (strict && short) return;
+        var x = p.type === 'sub' ? -(p.head - (o.depthM || 0)) / 10 : (p.controller ? 5 : 0);
+        out.push(finish({ goal: 'pump', dcPump: true, inverter: { item: p, units: 1, short: short }, battery: null, pv: null }, data, have, A, x));
+      });
+      return out;
+    }
     var motorW = o.pumpKw * 1000;
     data.INVERTERS.forEach(function (inv) {
       if (inv.kind !== 'pump' || inv.ratedW < motorW) return;
@@ -439,7 +487,7 @@
     var have = stockFn(stock, opts.region || 'ae');
     var o = {
       goal: opts.goal || 'backup', backupHours: opts.backupHours, solar: opts.solar, coverage: opts.coverage,
-      psh: opts.psh, pumpKw: opts.pumpKw, bizMode: opts.bizMode || 'hybrid'
+      psh: opts.psh, pumpKw: opts.pumpKw, bizMode: opts.bizMode || 'hybrid', pumpType: opts.pumpType || 'ac', depthM: opts.depthM, outletIn: opts.outletIn
     };
     var load;
     if (o.goal === 'biz') {
@@ -480,6 +528,8 @@
       var lfpAlt = all.filter(function (s) { return s.battery.model.chem === 'lfp'; })[0];
       if (res.best.battery.model.chem === 'lfp') { push(lead, 'lead'); push(outdoor, 'outdoor'); }
       else { push(lfpAlt, 'lithium'); push(outdoor, 'outdoor'); }
+      // transformer (LF) or modified sine (MF) inverter, with charge controllers when there are panels
+      push(all.filter(function (s) { return s.inverter.item.kind === 'lf' || s.inverter.item.kind === 'mf'; })[0], 'budget');
     } else if (o.goal === 'biz' && o.bizMode !== 'grid') {
       ['lv', 'hv', 'ess'].forEach(function (f) { if (f !== fam(res.best)) push(all.filter(function (s) { return fam(s) === f; })[0], 'fam-' + f); });
     } else {

@@ -25,10 +25,10 @@
   /* ---------- state ---------- */
   function defaults() {
     return { goal: 'backup', preset: 'p2', qty: clone(byId(D.PRESETS, 'p2').qty), region: 'ae', duration: 'short', hours: 3,
-      solar: true, coverage: 0.4, psh: 5.5, simult: 0.8, pumpHp: 3, monthlyKWh: 25000, peakKW: 80, bizMode: 'hybrid', view: 0, filter: 'all', search: '' };
+      solar: true, coverage: 0.4, psh: 5.5, simult: 0.8, pumpHp: 3, pumpType: 'ac', depthM: 40, outletIn: 3, monthlyKWh: 25000, peakKW: 80, bizMode: 'hybrid', view: 0, filter: 'all', search: '' };
   }
   var state = defaults();
-  var KEEP = ['goal', 'preset', 'qty', 'region', 'duration', 'hours', 'solar', 'coverage', 'psh', 'simult', 'pumpHp', 'monthlyKWh', 'peakKW', 'bizMode'];
+  var KEEP = ['goal', 'preset', 'qty', 'region', 'duration', 'hours', 'solar', 'coverage', 'psh', 'simult', 'pumpHp', 'pumpType', 'depthM', 'outletIn', 'monthlyKWh', 'peakKW', 'bizMode'];
 
   function sanitize(src) {
     var s = defaults();
@@ -47,6 +47,9 @@
     if (isFinite(+src.psh)) s.psh = clamp(+src.psh, 3, 7.5);
     if ([0.6, 0.8, 1].indexOf(+src.simult) > -1) s.simult = +src.simult;
     if (D.PUMPS.some(function (p) { return p.hp === +src.pumpHp; })) s.pumpHp = +src.pumpHp;
+    if (['ac', 'sub', 'surf'].indexOf(src.pumpType) > -1) s.pumpType = src.pumpType;
+    if (+src.depthM > 0) s.depthM = clamp(Math.round(+src.depthM), 1, 300);
+    if ([2, 3, 4].indexOf(+src.outletIn) > -1) s.outletIn = +src.outletIn;
     if (+src.monthlyKWh > 0) s.monthlyKWh = clamp(Math.round(+src.monthlyKWh), 100, 5000000);
     if (+src.peakKW > 0) s.peakKW = clamp(+src.peakKW, 1, 5000);
     if (['grid', 'hybrid', 'off'].indexOf(src.bizMode) > -1) s.bizMode = src.bizMode;
@@ -70,7 +73,7 @@
   function result() {
     return E.recommend(state.qty, {
       goal: state.goal, region: region().stock, backupHours: state.hours, solar: state.goal === 'off' ? true : state.solar,
-      coverage: state.coverage, psh: state.psh, simult: state.simult, pumpKw: pump().kw,
+      coverage: state.coverage, psh: state.psh, simult: state.simult, pumpKw: pump().kw, pumpType: state.pumpType, depthM: state.depthM, outletIn: state.outletIn,
       monthlyKWh: state.monthlyKWh, peakKW: state.peakKW, bizMode: state.bizMode
     }, D, STOCK);
   }
@@ -118,6 +121,12 @@
     $('#monthly').value = state.monthlyKWh; $('#peak').value = state.peakKW;
     $$('input[name="bizmode"]').forEach(function (r) { r.checked = r.value === state.bizMode; });
     $('#q-pump').hidden = g !== 'pump';
+    $$('input[name="pumptype"]').forEach(function (r) { r.checked = r.value === state.pumpType; });
+    $('#pump-ac').hidden = state.pumpType !== 'ac';
+    $('#pump-sub').hidden = state.pumpType !== 'sub';
+    $('#pump-surf').hidden = state.pumpType !== 'surf';
+    $('#depth').value = state.depthM;
+    $$('input[name="outlet"]').forEach(function (r) { r.checked = +r.value === state.outletIn; });
     $('#q-duration').hidden = g === 'grid' || g === 'pump' || (biz && state.bizMode === 'grid');
     $('#solar-row').hidden = g !== 'backup';
     $('#solar').checked = state.solar;
@@ -203,6 +212,7 @@
   function short(name) { return name.replace(/ Hybrid Inverter| Off Grid Inverter| Inverter/i, '').replace(/^Hybrid /, '').replace(/ Series/, ''); }
 
   function diagram(sys, res) {
+    if (sys.dcPump) return '';
     var inv = sys.inverter.item, L = res.load;
     var family = { 'Pump Inverter': 'Pump drive', 'PV Inverter': 'Grid inverter' }[inv.series] || inv.series.replace(' Series', '');
     var invLabel = (sys.inverter.units > 1 ? sys.inverter.units + ' x ' : '') + (inv.kind === 'ess' ? 'Storage ' : family + ' ') + pw(inv.ratedW);
@@ -245,6 +255,7 @@
 
   function headline(sys, res) {
     var L = res.load;
+    if (sys.dcPump) return sys.inverter.item.type === 'sub' ? 'A DC borewell pump rated to ' + sys.inverter.item.head + ' m of head for your ' + state.depthM + ' m well. It runs straight from solar panels, no battery.' : 'A ' + sys.inverter.item.outlet + ' inch DC surface pump that runs straight from solar panels, no battery.';
     if (sys.goal === 'pump') return 'Runs a ' + state.pumpHp + ' HP pump straight from the sun through the day. No battery needed.';
     if (sys.goal === 'biz' && sys.bizMode === 'grid') return 'A ' + nd(sys.pv.kWp, 0) + ' kWp plant making about ' + kwh(sys.pv.yieldKWh) + ' a day, around ' + pct(sys.pv.coverage) + ' of what the site uses.';
     if (sys.goal === 'biz') return 'Carries your ' + pw(L.runW) + ' site for about ' + hrs(sys.battery.runtimeH) + ' on ' + kwh(sys.battery.totalKWh) + ' of storage, with ' + nd(sys.pv.kWp, 0) + ' kWp of solar making about ' + kwh(sys.pv.yieldKWh) + ' a day.';
@@ -254,13 +265,14 @@
     return t + '.';
   }
 
-  var ALT_NAMES = { lead: 'Lead-acid battery version', outdoor: 'Outdoor IP65 version', lithium: 'Lithium battery version', other: 'Another inverter mix', first: 'Our first choice, to order', 'fam-lv': 'Low-voltage hybrids in parallel', 'fam-hv': 'Ultra Series with high-voltage battery', 'fam-ess': 'All-in-one storage cabinet' };
+  var ALT_NAMES = { lead: 'Lead-acid battery version', outdoor: 'Outdoor IP65 version', lithium: 'Lithium battery version', other: 'Another inverter mix', first: 'Our first choice, to order', budget: 'Transformer or budget inverter', 'fam-lv': 'Low-voltage hybrids in parallel', 'fam-hv': 'Ultra Series with high-voltage battery', 'fam-ess': 'All-in-one storage cabinet' };
 
   function partsHtml(sys) {
     var inv = sys.inverter.item, html = '';
     var invLine = '<b>' + (sys.inverter.units > 1 ? sys.inverter.units + ' units in parallel' : '1 unit') + '</b> &middot; ' + pw(inv.ratedW) + (inv.busV ? ' &middot; ' + inv.busV + ' V battery' : '') + (inv.phase === 3 ? ' &middot; three-phase supply' : '') + ' &middot; ' + esc(inv.ip);
     if (sys.battery && sys.battery.builtIn) invLine += ' &middot; ' + kwh(sys.battery.totalKWh) + ' battery built in';
-    html += partRow(inv.kind === 'pump' ? 'Pump drive' : inv.kind === 'ongrid' ? 'Grid-tied inverter' : inv.kind === 'lf' ? 'Backup inverter' : inv.kind === 'ess' ? 'Storage cabinet' : 'Inverter', inv, invLine, sys.inverter.units, sys.inverter.short);
+    if (sys.dcPump) invLine = '<b>1 unit</b> &middot; ' + (inv.type === 'sub' ? 'up to ' + inv.head + ' m head' : inv.outlet + ' inch outlet') + ' &middot; brushless DC, solar direct';
+    html += partRow(sys.dcPump ? 'DC solar pump' : inv.kind === 'pump' ? 'Pump drive' : inv.kind === 'ongrid' ? 'Grid-tied inverter' : inv.kind === 'lf' ? 'Backup inverter' : inv.kind === 'mf' ? 'Modified sine inverter' : inv.kind === 'ess' ? 'Storage cabinet' : 'Inverter', inv, invLine, sys.inverter.units, sys.inverter.short);
     (sys.extraInverters || []).forEach(function (x) {
       html += partRow(sys.acCoupled ? 'Solar inverter, AC-coupled' : 'Grid-tied inverter', x.item, '<b>' + x.units + ' &times;</b> ' + pw(x.item.ratedW) + (x.item.phase === 3 ? ' &middot; three-phase' : '') + ' &middot; ' + esc(x.item.ip), x.units, x.short);
     });
@@ -269,6 +281,7 @@
       var wiring = m.chem === 'hv' ? (b.units > 1 ? b.units + ' packs in parallel' : 'single pack') + ' on ' + m.v + ' V' : m.chem === 'lfp' ? (b.units > 1 ? b.units + ' in parallel' : 'single unit') : b.parallel + (b.parallel > 1 ? ' strings' : ' string') + ' of ' + b.series + ' for ' + b.busV + ' V';
       html += partRow('Battery', m, '<b>' + b.units + ' &times;</b> ' + wiring + ' &middot; ' + kwh(b.totalKWh) + ' total, ' + kwh(b.usableKWh) + ' usable', b.units, b.short);
     }
+    if (sys.controllers) html += partRow('Charge controller', sys.controllers.item, '<b>' + sys.controllers.units + ' &times; ' + sys.controllers.item.amps + ' A MPPT</b> &middot; carries up to ' + pw(sys.controllers.capW) + ' of panels on ' + sys.inverter.item.busV + ' V', sys.controllers.units, sys.controllers.short);
     if (sys.pv) html += partRow('Solar panels', sys.pv.panel, '<b>' + sys.pv.count + ' &times; ' + sys.pv.panel.wp + ' W</b> &middot; ' + nd(sys.pv.kWp, 2) + ' kWp &middot; about ' + n0(sys.pv.areaM2) + ' m&sup2; of roof', sys.pv.count, sys.pv.short);
     return '<ul class="parts">' + html + '</ul>' + fillHtml(sys);
   }
@@ -307,7 +320,8 @@
     if (sys.goal !== 'pump' && sys.goal !== 'grid' && sys.loadPct) t.push(['Inverter load', pct(sys.loadPct)]);
     if (sys.goal === 'biz' && sys.bizMode === 'grid') { t.push(['Plant size', nd(sys.pv.kWp, 0) + ' kWp']); t.push(['Share of use', pct(sys.pv.coverage)]); }
     if (sys.goal === 'grid') { t.push(['Share of use', pct(sys.pv.coverage)]); t.push(['A month', kwh(sys.pv.monthlyKWh)]); }
-    if (sys.goal === 'pump') { t.push(['Drive size', pw(sys.inverter.item.ratedW)]); t.push(['Roof or ground', n0(sys.pv.areaM2) + ' m²']); }
+    if (sys.dcPump) { t.push(sys.inverter.item.type === 'sub' ? ['Max head', sys.inverter.item.head + ' m'] : ['Outlet', sys.inverter.item.outlet + ' inch']); t.push(['Power', 'Solar direct']); }
+    else if (sys.goal === 'pump') { t.push(['Drive size', pw(sys.inverter.item.ratedW)]); t.push(['Roof or ground', n0(sys.pv.areaM2) + ' m²']); }
     return '<div class="stats">' + t.slice(0, 3).map(function (x) { return '<div class="stat-tile"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>'; }).join('') + '</div>';
   }
 
@@ -335,7 +349,10 @@
     if (sys.pv && sys.pv.capped) n.push('The inverter takes about ' + pw(sys.inverter.item.pvMaxW * sys.inverter.units) + ' of panels at most, so solar covers ' + pct(sys.pv.coverage) + ' instead of ' + pct(state.coverage) + '.');
     if (sys.goal === 'grid') n.push('Grid-tied inverters switch off in a power cut for safety. Choose Power backup if you need power during cuts.');
     if (sys.inverter.item.phase === 3) n.push('This inverter needs a three-phase supply.');
-    if (sys.goal === 'pump') n.push('Match the drive to the pump motor phase. Panels are sized at ' + nd(A.pumpArrayRatio, 1) + ' times the motor power so the pump keeps running in weaker sun.');
+    if (sys.dcPump) n.push('The DC pump datasheets give head and outlet size but no wattage, so our team sizes the panels from the pump curve and your daily water need on the quote.' + (sys.inverter.item.controller || sys.inverter.item.type === 'sub' && sys.inverter.item.head === 120 ? '' : ' Ask for the matching DC pump controller with it.'));
+    if (sys.controllers) n.push('This inverter has no solar charger of its own, so MPPT charge controllers put the panels on the battery. Your installer sets the panel string voltage to the controller datasheet.');
+    if (sys.inverter.item.kind === 'mf') n.push('Modified sine wave suits lights, fans, TVs and chargers. Fridges, ACs and pumps need a pure sine inverter.');
+    if (sys.goal === 'pump' && !sys.dcPump) n.push('Match the drive to the pump motor phase. Panels are sized at ' + nd(A.pumpArrayRatio, 1) + ' times the motor power so the pump keeps running in weaker sun.');
     if (sys.inverter.item.pvPublished === false && sys.pv && sys.pv.count * sys.pv.panel.wp >= 0.75 * sys.inverter.item.pvMaxW * sys.inverter.units) n.push('The solar input limit for this inverter is our estimate from its charge current. Our engineers confirm it from the datasheet.');
     return n.length ? '<ul class="notes">' + n.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '';
   }
@@ -347,6 +364,8 @@
     (sys.extraInverters || []).forEach(function (x) { lines.push(x.units + ' x ' + x.item.name); });
     if (sys.goal === 'biz') lines.push('Site ' + n0(state.peakKW) + ' kW highest load, ' + n0(state.monthlyKWh) + ' kWh a month');
     if (sys.battery && !sys.battery.builtIn) lines.push(sys.battery.units + ' x ' + sys.battery.model.name + ' (' + kwh(sys.battery.totalKWh) + ')');
+    if (sys.controllers) lines.push(sys.controllers.units + ' x ' + sys.controllers.item.name);
+    if (sys.dcPump) lines.push(sys.inverter.item.type === 'sub' ? 'Well depth ' + state.depthM + ' m' : 'Outlet ' + sys.inverter.item.outlet + ' inch');
     if (sys.pv) lines.push(sys.pv.count + ' x ' + sys.pv.panel.name + ' (' + nd(sys.pv.kWp, 2) + ' kWp)');
     if (sys.pv && sys.pv.fill) lines.push('(' + sys.pv.fill.inStock + ' in stock' + (sys.pv.fill.readyNow ? ', ready-now option adds ' + sys.pv.fill.readyNow.mix[1].count + ' x ' + sys.pv.fill.readyNow.mix[1].panel.name + ' on the second solar input' : '') + ')');
     sys.kit.forEach(function (k) { lines.push(k.qty + ' x ' + k.item.name); });
@@ -440,6 +459,9 @@
     } else if (t.name === 'preset') {
       state.preset = t.value; state.qty = clone(byId(D.PRESETS, t.value).qty); renderAppliances(); changed();
     } else if (t.name === 'pump') { state.pumpHp = +t.value; changed(); }
+    else if (t.name === 'pumptype') { state.pumpType = t.value; changed(); }
+    else if (t.name === 'outlet') { state.outletIn = +t.value; changed(); }
+    else if (t.id === 'depth') { state.depthM = clamp(Math.round(+t.value || 0), 1, 300); changed(); }
     else if (t.name === 'bizmode') { state.bizMode = t.value; state.coverage = t.value === 'off' ? 1 : 0.6; if (t.value === 'off') { state.hours = 14; state.duration = 'night'; } changed(); }
     else if (t.id === 'monthly') { state.monthlyKWh = clamp(Math.round(+t.value || 0), 100, 5000000); changed(); }
     else if (t.id === 'peak') { state.peakKW = clamp(+t.value || 0, 1, 5000); changed(); }

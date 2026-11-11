@@ -24,7 +24,7 @@ test('2 BHK load worked by hand', () => {
 });
 
 test('stock file is capped and holds only catalogue ids and the three countries', () => {
-  const ids = new Set([...data.INVERTERS, ...data.BATTERIES, ...data.PANELS, ...data.ACCESSORIES].map((i) => i.id));
+  const ids = new Set([...data.INVERTERS, ...data.BATTERIES, ...data.PANELS, ...data.ACCESSORIES, ...data.CONTROLLERS, ...data.DC_PUMPS].map((i) => i.id));
   for (const [id, v] of Object.entries(stock.items)) {
     assert.ok(ids.has(id), 'unknown id ' + id);
     assert.deepEqual(Object.keys(v).sort(), ['ae', 'ng', 'sa']);
@@ -62,9 +62,11 @@ function checkSystem(s, ctx, res, strict) {
     assert.ok(b.parallel <= b.model.maxPar);
     if (o.goal === 'off' || o.solar) {
       assert.ok(s.pv && s.pv.count >= 1, 'panels');
-      assert.ok(s.pv.count * s.pv.panel.wp <= inv.pvMaxW * s.inverter.units + s.pv.panel.wp, 'within solar input');
+      const cap = s.controllers ? s.controllers.capW : inv.pvMaxW * s.inverter.units;
+      assert.ok(s.pv.count * s.pv.panel.wp <= cap + s.pv.panel.wp, 'within solar input');
+      if (!inv.solar) assert.ok(s.controllers, 'inverter without solar charger has controllers');
     } else assert.ok(!s.pv);
-    if (inv.kind === 'lf') assert.ok(!s.pv, 'LF only without solar');
+    if (inv.kind === 'mf') assert.ok(!(res.load.surgeFrom && res.load.surgeFrom.surge >= 2.5), 'MF only without compressors');
   }
   if (o.goal === 'grid') {
     assert.equal(inv.kind, 'ongrid');
@@ -137,6 +139,29 @@ for (const r of ['ae', 'sa', 'ng']) for (const [peak, month] of [[15, 3000], [30
     }
   });
 }
+
+
+test('budget alternative: MF only without compressors, controllers sized to the array', () => {
+  const light = { led9: 6, tube: 2, fan: 3, tv: 1, router: 1, laptop: 1 };
+  for (const r of ['ae', 'sa', 'ng']) {
+    const res = engine.recommend(light, { goal: 'backup', region: r, backupHours: 8, solar: true, coverage: 0.7, psh: 5.5, simult: 0.8 }, data, stock);
+    const b = res.alternatives.find((a) => a.label === 'budget');
+    if (!b) continue;
+    assert.ok(['lf', 'mf'].includes(b.inverter.item.kind));
+    assert.ok(b.controllers && b.controllers.item.type === 'MPPT', 'MPPT controller with panels');
+    assert.ok(b.controllers.capW + 1e-6 >= b.pv.count * b.pv.panel.wp - b.pv.panel.wp, 'controllers carry the array');
+  }
+  const fridge = engine.recommend({ fridge: 1, led9: 4 }, { goal: 'backup', region: 'ae', backupHours: 4, solar: false, coverage: 0, psh: 5.5, simult: 0.8 }, data, stock);
+  for (const s of [fridge.best, ...fridge.alternatives]) assert.notEqual(s.inverter.item.kind, 'mf', 'no modified sine with a fridge');
+});
+test('DC pumps by depth and outlet', () => {
+  for (const [type, extra] of [['sub', { depthM: 40 }], ['sub', { depthM: 100 }], ['surf', { outletIn: 3 }], ['surf', { outletIn: 2 }]]) {
+    const res = engine.recommend({}, Object.assign({ goal: 'pump', pumpType: type, region: 'ae', psh: 5.5 }, extra), data, stock);
+    assert.ok(res.best && res.best.dcPump, type);
+    if (type === 'sub') assert.ok(res.best.inverter.item.head >= extra.depthM * 1.1);
+    else assert.equal(res.best.inverter.item.outlet, extra.outletIn);
+  }
+});
 
 test('stock decides, AE 2 BHK backup ready from stock', () => {
   const res = engine.recommend(P.p2, { goal: 'backup', region: 'ae', backupHours: 3, solar: true, coverage: 0.4, psh: 5.5, simult: 0.8 }, data, stock);

@@ -23,7 +23,7 @@ const COMPANY = { 8: 'ae', 14: 'sa', 7: 'ng' };
 const region = (loc, companyId) => (/^Physical Locations/.test(loc) ? null : COMPANY[companyId] || null);
 const norm = (s) => s.replace(/^\[[^\]]*\]\s*/, '').toUpperCase().replace(/\s+/g, ' ').trim();
 
-const items = [...cat.INVERTERS, ...cat.BATTERIES, ...cat.PANELS, ...cat.ACCESSORIES];
+const items = [...cat.INVERTERS, ...cat.BATTERIES, ...cat.PANELS, ...cat.ACCESSORIES, ...cat.CONTROLLERS, ...cat.DC_PUMPS];
 const rules = items.map((i) => ({ id: i.id, res: i.match.map((m) => new RegExp(m)) }));
 
 const products = new Map();

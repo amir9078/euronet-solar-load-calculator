@@ -11,10 +11,10 @@ Plain HTML, CSS and JavaScript. No build step, so it runs on GitHub Pages as it 
 | Power backup with solar | Hybrid or off-grid inverter, battery bank on the inverter's voltage, panels. Without panels it can also use LF backup inverters |
 | Cut my electricity bill | Grid-tied PV inverter (5 to 120 kW) and panels, no battery |
 | No grid at all | Inverter, battery and enough panels for the whole day |
-| Solar water pump | Pump drive sized to the motor, panels at 1.5 times the motor power |
+| Solar water pump | Existing AC motor (pump drive by HP, panels at 1.5 times the motor power), DC borewell pump by well depth, or DC surface pump by outlet size |
 | Business, factory or project | From monthly kWh and highest load. Bill saving builds a grid-tied plant from a mix of PV inverters. Backup and off-grid compare paralleled RSZ or Pro or Edge hybrids, Ultra 30 kW with high-voltage packs, and 125 kW or 100 kW storage cabinets, with built-in or AC-coupled solar |
 
-The catalogue (`js/catalog.js`) holds 46 inverters and storage cabinets (A, Shark, Onyx, RS, S, RSZ, Pro IP65, Edge, Ultra, LF, PV, pump, C&I ESS), 30 batteries (lithium, gel Blue, Eco and FT, tubular, high-voltage packs), 6 panels and 14 fitting kit parts. Parallel units follow the datasheets (RSZ up to 9, Pro 10 and 16 kW up to 6, Ultra up to 10, storage cabinets up to 10).
+The catalogue (`js/catalog.js`) holds 52 inverters and storage cabinets (A, Shark, Onyx, RS, S, RSZ, Pro IP65, Edge, Ultra, LF, MF, PV, pump, C&I ESS), 30 batteries (lithium, gel Blue, Eco and FT, tubular, high-voltage packs), 6 panels, 11 charge controllers, 9 DC pumps and controllers, and 14 fitting kit parts. Inverters without their own solar charger (LF and MF) get panels through MPPT controllers, shown as the budget option. MF (modified sine) is only offered when nothing in the load has a compressor or pump. Parallel units follow the datasheets (RSZ up to 9, Pro 10 and 16 kW up to 6, Ultra up to 10, storage cabinets up to 10).
 
 ## How it picks
 
@@ -42,5 +42,5 @@ The first runs about 400 checks across every country, goal, home type, backup le
 ## Notes
 
 - Figures come from the EURONET datasheets and product records. Solar input limits that are not published are estimated from charge current and flagged on screen.
-- The LF 5500VA and PV 8 kW are left out because their datasheet figures are missing or unclear.
+- The LF 5500VA and PV 8 kW are left out because their datasheet figures are missing or unclear. DC pumps publish head and outlet only, so their panels are sized on the quote. The Nigeria all-in-one kits are not on the website, so they are not in the catalogue. PWM controllers are listed but not picked, because they waste most of a large panel.
 - The page is `noindex` while it lives on github.io.
